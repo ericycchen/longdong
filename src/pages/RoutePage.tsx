@@ -1,0 +1,155 @@
+import type { LoadedData } from '../data/dataset'
+import type { Bolt } from '../data/schema'
+import { StatusBadge } from '../components/StatusBadge'
+import { TYPE_LABEL, formatDate, yearsSince } from '../format'
+import { href } from '../router'
+import { NotFound } from './AreaPage'
+
+export function RoutePage({ data, id }: { data: LoadedData; id: string }) {
+  const ref = data.routeById.get(id)
+  if (!ref) return <NotFound />
+  const { route, sector, area } = ref
+  const danger = route.status === 'closed' || route.status === 'to-remove'
+
+  return (
+    <article className="route">
+      <nav className="crumbs">
+        <a href={href.home()}>龍洞</a> / <a href={href.area(area.id)}>{area.name.zh}</a> / {sector.name.zh}
+      </nav>
+
+      <header className="route-head">
+        {route.number && <span className="route-no big">#{route.number}</span>}
+        <h1>
+          {route.name.zh}
+          {route.name.en && <span className="en">{route.name.en}</span>}
+        </h1>
+        <div className="facts">
+          {route.grade && <span className="grade big">{route.grade}</span>}
+          {route.type && <span>{TYPE_LABEL[route.type]}</span>}
+          {route.isFixture && <span>固定點</span>}
+          {route.heightM && <span>{route.heightM} m</span>}
+          {route.safety && <span title="安全評級">{route.safety}</span>}
+        </div>
+      </header>
+
+      {danger && (
+        <p className="alert" role="alert">
+          此路線標示為「{route.statusLabel}」，請勿攀登。
+        </p>
+      )}
+
+      <section className="panel">
+        <dl className="kv">
+          <dt>路線狀態</dt>
+          <dd>
+            {route.status ? <StatusBadge status={route.status} /> : <span className="muted">未記錄</span>}
+            {route.statusDate && <span className="muted"> {formatDate(route.statusDate)}</span>}
+          </dd>
+          <dt>最近拉測</dt>
+          <dd>
+            {route.lastTested ? (
+              <>
+                {formatDate(route.lastTested)} <span className="muted">（{ageText(route.lastTested)}）</span>
+              </>
+            ) : (
+              <span className="muted">無紀錄</span>
+            )}
+          </dd>
+          {route.boltCount !== undefined && route.boltCount > 0 && (
+            <>
+              <dt>Bolt 數</dt>
+              <dd>{route.boltCount}</dd>
+            </>
+          )}
+          {route.firstAscent && (
+            <>
+              <dt>首攀</dt>
+              <dd className="pre">
+                {route.firstAscent}
+                {route.firstAscentDate && <span className="muted">{'\n'}{formatDate(route.firstAscentDate)}</span>}
+              </dd>
+            </>
+          )}
+        </dl>
+      </section>
+
+      {route.description && (
+        <section>
+          <h2>路線資訊</h2>
+          <p className="pre">{route.description}</p>
+        </section>
+      )}
+
+      {route.bolts.length > 0 && <BoltTable title="Bolt" bolts={route.bolts} data={data} />}
+      {route.anchors.length > 0 && <BoltTable title="Anchor" bolts={route.anchors} data={data} />}
+
+      {route.anchorHardware.length > 0 && (
+        <section>
+          <h2>Anchor 配件</h2>
+          <ul className="plain">
+            {route.anchorHardware.map((h, i) => (
+              <li key={i}>
+                {h.item}
+                {h.quantity && ` ×${h.quantity}`}
+                {h.spec && <span className="muted"> {h.spec}</span>}
+                {h.installed && <span className="muted"> · {formatDate(h.installed)} 安裝</span>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {route.notes && (
+        <section>
+          <h2>備註</h2>
+          <p className="pre small">{route.notes}</p>
+        </section>
+      )}
+    </article>
+  )
+}
+
+function ageText(date: string): string {
+  const y = yearsSince(date)
+  return y === undefined ? '' : y === 0 ? '一年內' : `${y} 年前`
+}
+
+function BoltTable({ title, bolts, data }: { title: string; bolts: Bolt[]; data: LoadedData }) {
+  return (
+    <section>
+      <h2>{title}</h2>
+      <div className="table-wrap">
+        <table className="bolts">
+          <thead>
+            <tr>
+              <th>位置</th>
+              <th>材質</th>
+              <th>安裝</th>
+              <th>最近拉測</th>
+            </tr>
+          </thead>
+          <tbody>
+            {bolts.map((b) => {
+              const desc = data.hardwareByCode.get(b.material)
+              const years = yearsSince(b.installed)
+              return (
+                <tr key={b.position} className={desc ? '' : 'muted'}>
+                  <td className="mono">{b.position}</td>
+                  <td>
+                    {b.material}
+                    {desc && <span className="sub">{desc}</span>}
+                  </td>
+                  <td>
+                    {b.installed ? formatDate(b.installed) : '—'}
+                    {years !== undefined && <span className="sub">{years} 年</span>}
+                  </td>
+                  <td>{b.tests[0] ? formatDate(b.tests[0]) : '—'}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}

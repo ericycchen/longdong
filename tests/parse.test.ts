@@ -1,0 +1,127 @@
+import { describe, expect, it } from 'vitest'
+import Papa from 'papaparse'
+import { gradeValue, parseDate, splitName, cleanText } from '../scripts/lib/normalize'
+import { parseAreaSheet, parseHardwareSheet } from '../scripts/lib/parse'
+
+const HEADER = ['分區', '路線編號', '路線名稱', '難度', '路線種類', '高度', '首攀', '首攀日期', '路線資訊描述', '安全評級',
+  'B01', 'B02', 'A01', 'A02', 'Anchor 配件', '', 'Bolt 統計', '路線狀態', '日期', '備註']
+
+/** 用欄位名稱組出一列，其餘欄位留空 */
+function row(cells: Record<string, string>): string[] {
+  const used = new Map<string, number>()
+  return HEADER.map((h) => {
+    const key = h === '' ? `_${(used.get('') ?? 0) + 1}` : h
+    if (h === '') used.set('', (used.get('') ?? 0) + 1)
+    return cells[key] ?? ''
+  })
+}
+
+function sheet(rows: string[][]): string {
+  return Papa.unparse([['  後門\n  Back Door', '4', '支 Bolt', '2', '條攀登路線'], HEADER, ...rows])
+}
+
+describe('normalize', () => {
+  it('把康熙部首字元轉成一般漢字', () => {
+    expect(cleanText('⽯克偉')).toBe('石克偉')
+  })
+
+  it('拆出中英文名稱', () => {
+    expect(splitName('別撈過界\nDon\'t Cross the Line')).toEqual({ zh: '別撈過界', en: "Don't Cross the Line" })
+    expect(splitName('第一洞內\n南面\nInterior\nSouth End')).toEqual({ zh: '第一洞內 南面', en: 'Interior South End' })
+    expect(splitName('Verdon 在台灣\nVerdon du Taiwan')).toEqual({ zh: 'Verdon 在台灣', en: 'Verdon du Taiwan' })
+  })
+
+  it('解析各種日期格式', () => {
+    expect(parseDate('2018 / 04 / 14 (週六)')).toBe('2018-04-14')
+    expect(parseDate('1991 / 06')).toBe('1991-06')
+    expect(parseDate('2004')).toBe('2004')
+    expect(parseDate('20260712')).toBe('2026-07-12')
+    expect(parseDate('44192')).toBe('2020-12-27')
+    expect(parseDate('20 年')).toBeUndefined()
+  })
+
+  it('難度數值可排序', () => {
+    expect(gradeValue('5.9')).toBeLessThan(gradeValue('5.10a')!)
+    expect(gradeValue('5.10a/b')).toBe(40.5)
+    expect(gradeValue('5.10? R')).toBe(41.5)
+    expect(gradeValue('5.??')).toBeUndefined()
+  })
+})
+
+describe('parseAreaSheet', () => {
+  const csv = sheet([
+    row({ 分區: '地下一樓\nB1', 路線編號: '# 1', 路線名稱: 'ㄅ\nBo', 難度: '5.7', 路線種類: '抱石 | Boulder', 高度: '5 m', 'Bolt 統計': '0' }),
+    row({}),
+    row({
+      路線編號: '# 523', 路線名稱: 'V槽\nV-Groove', 難度: '5.10b', 路線種類: '運攀 | Sport',
+      首攀: '王世⿍\n—\nJeff Wang', 路線資訊描述: '說明\n–\n無 Anchor',
+      B01: '316-TW', B02: '共用', A01: 'Ti-U', A02: 'Ti-U', 'Anchor 配件': '梅隆鎖-316', _1: '垂降環-316',
+      'Bolt 統計': '3', 路線狀態: '已拉測', 日期: '2025 / 12 / 04 (週四)', 備註: '[Pulltest] 全線合格',
+    }),
+    row({ B01: '2006 / 07 / 30', A01: '2016', 'Anchor 配件': '數量 x2 ', _1: '數量 x2 ' }),
+    row({ B01: '20 年', A01: '10 年', 'Anchor 配件': '2020 / 12 / 01', _1: '2020 / 12 / 01' }),
+    row({ B01: '2020 / 04 / 16', A01: '2025 / 12 / 04' }),
+    row({ B01: '2025 / 12 / 04' }),
+    row({ 分區: '地下二樓\nBasement', 路線編號: '# 0', 路線名稱: '私設固定點' }),
+    row({ 路線編號: '316-TW', 路線名稱: '316 - 台製', 難度: '358' }),
+    row({ 路線編號: '# 999', 路線名稱: '圖例之後不該被讀進來' }),
+  ])
+  const area = parseAreaSheet(csv, 'back-door', '後門')
+  const routes = area.sectors.flatMap((s) => s.routes)
+
+  it('讀出區域名稱與統計', () => {
+    expect(area.name).toEqual({ zh: '後門', en: 'Back Door' })
+    expect(area.summary).toEqual({ bolts: 4, routes: 2 })
+  })
+
+  it('合併儲存格的分區往下沿用，圖例之後停止', () => {
+    expect(area.sectors.map((s) => [s.name.zh, s.routes.map((r) => r.id)])).toEqual([
+      ['地下一樓', ['r1', 'r523']],
+      ['地下二樓', ['back-door-x1']],
+    ])
+  })
+
+  it('解析 bolt 的材質、安裝日期與拉測紀錄', () => {
+    const r = routes.find((x) => x.id === 'r523')!
+    expect(r.bolts).toEqual([
+      { position: 'B01', material: '316-TW', installed: '2006-07-30', tests: ['2025-12-04', '2020-04-16'] },
+      { position: 'B02', material: '共用', tests: [] },
+    ])
+    expect(r.anchors[0]).toEqual({ position: 'A01', material: 'Ti-U', installed: '2016', tests: ['2025-12-04'] })
+    expect(r.anchorHardware).toEqual([
+      { item: '梅隆鎖-316', quantity: 2, installed: '2020-12-01' },
+      { item: '垂降環-316', quantity: 2, installed: '2020-12-01' },
+    ])
+    expect(r.lastTested).toBe('2025-12-04')
+    expect(r.status).toBe('tested')
+    expect(r.statusDate).toBe('2025-12-04')
+    expect(r.firstAscent).toBe('王世鼎\nJeff Wang')
+    expect(r.description).toBe('說明\n\n無 Anchor')
+  })
+
+  it('沒有難度和種類的項目標為固定點', () => {
+    const fixture = routes.find((x) => x.id === 'back-door-x1')!
+    expect(fixture.isFixture).toBe(true)
+    expect(fixture.number).toBeUndefined()
+  })
+
+  it('分頁標題不符時報錯', () => {
+    expect(() => parseAreaSheet(csv, 'golden-valley', '黃金谷')).toThrow(/gid/)
+  })
+})
+
+describe('parseHardwareSheet', () => {
+  it('讀出材質代號對照表', () => {
+    const csv = Papa.unparse([
+      ['', '各區錨栓統計表'],
+      ['', 'Bolt 代號', '材質 - 廠牌 - 型號', '後門'],
+      ['', '304-FX', '304 - Fixe', '0'],
+      ['', 'Ti-U', 'Ti - Titan Climbing - U形', '13'],
+      ['', '統計', '', '440'],
+    ])
+    expect(parseHardwareSheet(csv)).toEqual([
+      { code: '304-FX', description: '304 - Fixe' },
+      { code: 'Ti-U', description: 'Ti - Titan Climbing - U形' },
+    ])
+  })
+})

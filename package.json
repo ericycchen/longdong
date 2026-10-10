@@ -1,0 +1,38 @@
+{
+  "name": "longdong-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "龍洞攀岩路線資料庫 — offline-first PWA",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "import": "tsx scripts/import-sheet.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "minisearch": "^7.2.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "@types/papaparse": "^5.5.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "papaparse": "^5.7.0",
+    "tsx": "^4.23.15",
+    "typescript": "~5.9.3",
+    "vite": "^6.4.4",
+    "vite-plugin-pwa": "^1.3.0",
+    "vitest": "^3.2.7",
+    "zod": "^3.25.76"
+  }
+}

@@ -1,0 +1,41 @@
+/// <reference types="vitest/config" />
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
+
+// base 用相對路徑，部署在 GitHub Pages 子路徑或自訂網域都能運作（路由用 hash）
+export default defineConfig({
+  base: './',
+  plugins: [
+    react(),
+    VitePWA({
+      registerType: 'prompt',
+      includeAssets: ['icons/*.svg'],
+      manifest: {
+        name: '龍洞攀岩資料庫',
+        short_name: '龍洞',
+        description: '龍洞攀岩路線與 Bolt 資訊，離線可用',
+        lang: 'zh-Hant-TW',
+        start_url: './',
+        scope: './',
+        display: 'standalone',
+        background_color: '#f6f4ef',
+        theme_color: '#1f4e5f',
+        icons: [
+          { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+          { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
+      },
+      workbox: {
+        // App 和完整路線資料一起預先快取，沒有訊號也能使用
+        globPatterns: ['**/*.{js,css,html,svg,png,json}'],
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+        navigateFallback: 'index.html',
+      },
+    }),
+  ],
+  test: {
+    include: ['tests/**/*.test.ts'],
+  },
+})
