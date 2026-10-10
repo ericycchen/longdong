@@ -13,7 +13,7 @@ import { dirname, join, resolve } from 'node:path'
 import { Dataset, type Area } from '../src/data/schema'
 import { parseAreaSheet, parseHardwareSheet } from './lib/parse'
 import { htmlUrl, parseSafetyHtml } from './lib/safety'
-import { AREA_TABS, DATA_ATTRIBUTION, DATA_LICENSE, PROJECT_URL, SHEET_ID, SHEET_URL, STATS_GID, csvUrl } from './sheet.config'
+import { AREA_TABS, CRAG, DATA_ATTRIBUTION, DATA_LICENSE, PROJECT_URL, SHEET_ID, SHEET_URL, STATS_GID, csvUrl } from './sheet.config'
 
 const OUT = resolve(import.meta.dirname, '../public/data/longdong.json')
 
@@ -54,7 +54,12 @@ async function main() {
     const { ratings, unreadable } = parseSafetyHtml(areaHtmls[i], tab.gid)
     if (ratings.size === 0) throw new Error(`[${tab.id}] htmlview 裡找不到任何安全評級燈號，Sheet 版面可能變了`)
     for (const row of unreadable) warnings.push(`[${tab.id}] 第 ${row + 1} 列：安全評級燈號無法判讀`)
-    const { warnings: w, ...area } = parseAreaSheet(areaCsvs[i], tab.id, tab.zh, ratings)
+    const { warnings: w, ...area } = parseAreaSheet(areaCsvs[i], {
+      cragId: CRAG.id,
+      areaId: tab.id,
+      expectedZh: tab.zh,
+      safety: ratings,
+    })
     warnings.push(...w)
     return area
   })
@@ -77,7 +82,8 @@ async function main() {
 
   // version 涵蓋 version、updatedAt 以外的所有內容，metadata 變動也會重新輸出
   const content = {
-    schemaVersion: 1 as const,
+    schemaVersion: 2 as const,
+    crag: CRAG,
     source: { sheetId: SHEET_ID, url: SHEET_URL, attribution: DATA_ATTRIBUTION, projectUrl: PROJECT_URL },
     license: DATA_LICENSE,
     hardware,

@@ -542,3 +542,189 @@ main {
   font-weight: 700;
   color: var(--muted);
 }
+
+/* ---------- personal ---------- */
+
+.personal {
+  margin: 4px 0 12px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.action {
+  font: inherit;
+  min-height: 40px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.action.on {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.action.primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-text);
+}
+
+.action:disabled {
+  opacity: 0.5;
+}
+
+.tick-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.tick-form label,
+.tick-form legend {
+  display: grid;
+  gap: 4px;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.tick-form fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.tick-form legend {
+  margin-bottom: 4px;
+}
+
+.tick-form input,
+.tick-form textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.my-ticks {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0;
+  font-size: 0.9rem;
+}
+
+.my-ticks li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.tick-date {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.tick-style {
+  font-weight: 600;
+}
+
+.tick-style.style-attempt {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.tick-note {
+  flex-basis: 100%;
+  color: var(--muted);
+}
+
+.link-button {
+  margin-left: auto;
+  font: inherit;
+  font-size: 0.8rem;
+  background: none;
+  border: 0;
+  color: var(--muted);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.marks {
+  margin-left: 6px;
+  color: var(--accent);
+  font-size: 0.85em;
+  letter-spacing: 2px;
+}
+
+.me-link {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.stats div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.stats strong {
+  font-size: 1.3rem;
+}
+
+.stats span {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.tick-row {
+  display: grid;
+  grid-template-columns: 5.6em 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.backup {
+  margin-top: 24px;
+}

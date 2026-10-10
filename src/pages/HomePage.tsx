@@ -5,6 +5,7 @@ import { RouteRow } from '../components/RouteRow'
 import { TYPE_LABEL } from '../format'
 import { href } from '../router'
 import { buildIndex, search } from '../search'
+import { usePersonal } from '../personal/store'
 
 const MAX_RESULTS = 100
 
@@ -15,6 +16,7 @@ function readQuery(): string {
 
 export function HomePage({ data }: { data: LoadedData }) {
   const [query, setQuery] = useState(readQuery)
+  const personal = usePersonal()
   const index = useMemo(() => buildIndex(data.routes), [data])
   const results = useMemo(() => {
     const found = search(index, query).map((id) => data.routeById.get(id)!)
@@ -42,6 +44,15 @@ export function HomePage({ data }: { data: LoadedData }) {
           onChange={(e) => onChange(e.target.value)}
         />
       </div>
+
+      {!query.trim() && !personal.error && (
+        <a className="me-link" href={href.me()}>
+          <span>我的紀錄</span>
+          <span className="muted small">
+            ★ 收藏 {personal.favorites.size} · ✓ 攀登紀錄 {personal.ticks.length}
+          </span>
+        </a>
+      )}
 
       {query.trim() ? (
         <section>

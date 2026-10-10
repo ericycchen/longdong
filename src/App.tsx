@@ -4,6 +4,7 @@ import { relativeTime } from './format'
 import { AboutPage } from './pages/AboutPage'
 import { AreaPage } from './pages/AreaPage'
 import { HomePage } from './pages/HomePage'
+import { MePage } from './pages/MePage'
 import { RoutePage } from './pages/RoutePage'
 import { href, usePage } from './router'
 
@@ -44,6 +45,8 @@ export function App() {
             <AreaPage key={page.id} data={state.data} id={page.id} />
           ) : page.name === 'route' ? (
             <RoutePage data={state.data} id={page.id} />
+          ) : page.name === 'me' ? (
+            <MePage data={state.data} />
           ) : page.name === 'about' ? (
             <AboutPage data={state.data} />
           ) : (
@@ -61,7 +64,9 @@ export function App() {
             {state.data.dataset.source.attribution}
           </a>
           <br />
-          僅供參考，攀登前請自行確認現場狀況 · <a href={href.about()}>關於與說明</a>
+          僅供參考，攀登前請自行確認現場狀況
+          <br />
+          <a href={href.me()}>我的紀錄</a> · <a href={href.about()}>關於與說明</a>
         </footer>
       )}
     </>

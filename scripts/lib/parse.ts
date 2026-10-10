@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import Papa from 'papaparse'
 import type { AnchorHardware, Area, Bolt, Hardware, Route, Safety, Sector } from '../../src/data/schema'
 import {
@@ -40,15 +41,23 @@ export interface ParsedArea extends Area {
   warnings: string[]
 }
 
+export interface AreaSheetOptions {
+  cragId: string
+  areaId: string
+  /** 分頁標題的中文名稱，用來確認 gid 沒有對錯 */
+  expectedZh: string
+  /** 列索引 → 安全評級燈號，null 為尚未評級（由 htmlview 解析，見 safety.ts） */
+  safety?: Map<number, Safety | null>
+}
+
 /**
- * @param safety 列索引 → 安全評級燈號，null 為尚未評級（由 htmlview 解析，見 safety.ts）
+ * ID 規則（使用者的收藏與攀登紀錄會用到，發布後不可再改）：
+ *   區域  <crag>/<area>            longdong/back-door
+ *   路線  <crag>/<路線編號>         longdong/523、longdong/100.1
+ *   未編號 <crag>/x-<雜湊>          由「區域＋中文名稱」產生，Sheet 上調整順序也不會變
  */
-export function parseAreaSheet(
-  text: string,
-  areaId: string,
-  expectedZh: string,
-  safety: Map<number, Safety | null> = new Map(),
-): ParsedArea {
+export function parseAreaSheet(text: string, opts: AreaSheetOptions): ParsedArea {
+  const { cragId, areaId, expectedZh, safety = new Map() } = opts
   const rows = readCsv(text)
   const warnings: string[] = []
 
@@ -122,7 +131,6 @@ export function parseAreaSheet(
   // 2. 區塊轉成路線，並依分區分組
   const sectors: Sector[] = []
   const sectorByKey = new Map<string, Sector>()
-  let unnumbered = 0
 
   for (const block of blocks) {
     const first = block.rows[0]
@@ -149,7 +157,7 @@ export function parseAreaSheet(
 
     const statusLabel = cell(C.status) || undefined
     const route: Route = {
-      id: number ? `r${number}` : `${areaId}-x${++unnumbered}`,
+      id: number ? `${cragId}/${number}` : `${cragId}/x-${stableHash(`${areaId}|${name.zh}`)}`,
       number,
       isFixture: !grade && !type,
       pitch: parsePitch(name.zh),
@@ -183,7 +191,7 @@ export function parseAreaSheet(
     const key = sectorName.zh
     let sector = sectorByKey.get(key)
     if (!sector) {
-      sector = { id: `${areaId}-s${sectors.length + 1}`, name: sectorName, routes: [] }
+      sector = { id: `${cragId}/${areaId}-s${sectors.length + 1}`, name: sectorName, routes: [] }
       sectorByKey.set(key, sector)
       sectors.push(sector)
     }
@@ -192,7 +200,7 @@ export function parseAreaSheet(
 
   const [, bolts, , routes] = rows[0]
   return {
-    id: areaId,
+    id: `${cragId}/${areaId}`,
     name: title,
     summary: { bolts: parseInt0(bolts), routes: parseInt0(routes) },
     notes,
@@ -268,6 +276,10 @@ export function parseHardwareSheet(text: string): Hardware[] {
 export function parsePitch(zhName: string): number | undefined {
   const m = zhName.match(/\|\s*P(\d+)/i)
   return m ? Number(m[1]) : undefined
+}
+
+function stableHash(text: string): string {
+  return createHash('sha1').update(text).digest('hex').slice(0, 8)
 }
 
 function stripUndefined<T extends object>(obj: T): T {

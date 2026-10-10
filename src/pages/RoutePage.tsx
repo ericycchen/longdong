@@ -1,5 +1,6 @@
 import type { LoadedData } from '../data/dataset'
 import type { Bolt } from '../data/schema'
+import { PersonalPanel } from '../components/PersonalPanel'
 import { SafetyLight } from '../components/SafetyLight'
 import { StatusBadge } from '../components/StatusBadge'
 import { formatDate, typeText, yearsSince } from '../format'
@@ -36,6 +37,8 @@ export function RoutePage({ data, id }: { data: LoadedData; id: string }) {
           </div>
         )}
       </header>
+
+      {!route.isFixture && <PersonalPanel route={route} />}
 
       {danger && (
         <p className="alert" role="alert">

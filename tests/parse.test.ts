@@ -66,8 +66,9 @@ describe('parseAreaSheet', () => {
     row({ 路線編號: '316-TW', 路線名稱: '316 - 台製', 難度: '358' }),
     row({ 路線編號: '# 999', 路線名稱: '圖例之後不該被讀進來' }),
   ])
-  const area = parseAreaSheet(csv, 'back-door', '後門')
+  const area = parseAreaSheet(csv, { cragId: 'longdong', areaId: 'back-door', expectedZh: '後門' })
   const routes = area.sectors.flatMap((s) => s.routes)
+  const fixtureId = routes[2].id
 
   it('讀出區域名稱與統計', () => {
     expect(area.name).toEqual({ zh: '後門', en: 'Back Door' })
@@ -76,13 +77,13 @@ describe('parseAreaSheet', () => {
 
   it('合併儲存格的分區往下沿用，圖例之後停止', () => {
     expect(area.sectors.map((s) => [s.name.zh, s.routes.map((r) => r.id)])).toEqual([
-      ['地下一樓', ['r1', 'r523']],
-      ['地下二樓', ['back-door-x1']],
+      ['地下一樓', ['longdong/1', 'longdong/523']],
+      ['地下二樓', [fixtureId]],
     ])
   })
 
   it('解析 bolt 的材質、安裝日期與拉測紀錄', () => {
-    const r = routes.find((x) => x.id === 'r523')!
+    const r = routes.find((x) => x.id === 'longdong/523')!
     expect(r.bolts).toEqual([
       { position: 'B01', material: '316-TW', installed: '2006-07-30', tests: ['2025-12-04', '2020-04-16'] },
       { position: 'B02', material: '共用', tests: [] },
@@ -99,14 +100,25 @@ describe('parseAreaSheet', () => {
     expect(r.description).toBe('說明\n\n無 Anchor')
   })
 
+  it('ID 帶岩場前綴；未編號項目的 ID 由區域與名稱決定，不受列順序影響', () => {
+    expect(area.id).toBe('longdong/back-door')
+    expect(fixtureId).toMatch(/^longdong\/x-[0-9a-f]{8}$/)
+    const reordered = sheet([
+      row({ 分區: '地下二樓', 路線編號: '# 0', 路線名稱: '私設固定點' }),
+      row({ 路線編號: '# 1', 路線名稱: 'ㄅ', 難度: '5.7' }),
+    ])
+    const again = parseAreaSheet(reordered, { cragId: 'longdong', areaId: 'back-door', expectedZh: '後門' })
+    expect(again.sectors[0].routes[0].id).toBe(fixtureId)
+  })
+
   it('沒有難度和種類的項目標為固定點', () => {
-    const fixture = routes.find((x) => x.id === 'back-door-x1')!
+    const fixture = routes.find((x) => x.id === fixtureId)!
     expect(fixture.isFixture).toBe(true)
     expect(fixture.number).toBeUndefined()
   })
 
   it('分頁標題不符時報錯', () => {
-    expect(() => parseAreaSheet(csv, 'golden-valley', '黃金谷')).toThrow(/gid/)
+    expect(() => parseAreaSheet(csv, { cragId: 'longdong', areaId: 'golden-valley', expectedZh: '黃金谷' })).toThrow(/gid/)
   })
 })
 

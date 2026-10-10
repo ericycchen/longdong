@@ -25,6 +25,25 @@ public/data/longdong.json（commit 進 repo，每次變動都有 diff 可查）
 - `.github/workflows/deploy.yml` 每天台灣時間 03:00 匯入一次；資料有變動才 commit。也可以在 Actions 頁面手動執行。
 - 資料內容沒變時 `version` 和 `updatedAt` 不會改，不會產生多餘的 commit。
 
+## 路線 ID
+
+使用者的收藏與攀登紀錄以路線 ID 指向路線，**ID 發布後不可再改**：
+
+| 項目 | 格式 | 例 |
+|---|---|---|
+| 區域 | `<岩場>/<區域>` | `longdong/back-door` |
+| 路線 | `<岩場>/<路線編號>` | `longdong/523`、`longdong/100.1` |
+| 同編號的多段繩距 | `<岩場>/<編號>-p<段>` | `longdong/242-p2` |
+| 未編號項目 | `<岩場>/x-<雜湊>`（由區域＋中文名稱產生） | `longdong/x-13fa9b8b` |
+
+未編號項目改名會改變 ID，建議在 Sheet 上給正式編號。早期沒有岩場前綴的網址（`#/route/r523`）會自動轉到新 ID。
+
+## 個人資料
+
+收藏與攀登紀錄只存在使用者瀏覽器的 IndexedDB（`src/personal/`），沒有帳號、不上傳。
+每筆紀錄有唯一 ID、`updatedAt` 與刪除標記，匯入備份或日後同步雲端時以「較新者為準」合併。
+使用者可在「我的紀錄」頁匯出 JSON 備份、匯入，或匯出 CSV。
+
 ## 開發
 
 需要 Node.js 20 以上（CI 使用 `.nvmrc` 指定的 22）。

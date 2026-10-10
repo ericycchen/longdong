@@ -7,6 +7,9 @@ import { z } from 'zod'
 
 const PartialDate = z.string().regex(/^\d{4}(-\d{2}(-\d{2})?)?$/)
 
+/** 全域唯一 ID：<岩場>/<岩場內 ID>，例如 longdong/523。使用者資料以此指向路線，發布後不可再改 */
+const GlobalId = z.string().regex(/^[a-z0-9-]+\/[a-z0-9.-]+$/)
+
 export const LocalizedName = z.object({
   zh: z.string().min(1),
   en: z.string().optional(),
@@ -45,8 +48,8 @@ export const AnchorHardware = z.object({
 })
 
 export const Route = z.object({
-  /** r523、r100.1；未編號項目為 <區域>-x<序號> */
-  id: z.string().regex(/^[a-z0-9.-]+$/),
+  /** longdong/523、longdong/100.1、longdong/242-p2；未編號項目為 longdong/x-<雜湊> */
+  id: GlobalId,
   /** 官方路線編號，例如 "523"、"100.1"；未編號（Sheet 上為 # 0）時省略 */
   number: z.string().optional(),
   /** 沒有難度和種類的項目，例如救援固定點、私設固定點 */
@@ -76,13 +79,13 @@ export const Route = z.object({
 })
 
 export const Sector = z.object({
-  id: z.string(),
+  id: GlobalId,
   name: LocalizedName,
   routes: z.array(Route),
 })
 
 export const Area = z.object({
-  id: z.string().regex(/^[a-z0-9-]+$/),
+  id: GlobalId,
   name: LocalizedName,
   /** Sheet 表頭上的統計數字 */
   summary: z.object({ bolts: z.number().optional(), routes: z.number().optional() }),
@@ -95,8 +98,14 @@ export const Hardware = z.object({
   description: z.string(),
 })
 
+export const Crag = z.object({
+  id: z.string().regex(/^[a-z0-9-]+$/),
+  name: LocalizedName,
+})
+
 export const Dataset = z.object({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
+  crag: Crag,
   /** 內容雜湊，資料沒變時維持不變 */
   version: z.string(),
   /** 資料內容最後一次變動的時間（ISO 8601） */
@@ -123,4 +132,5 @@ export type Route = z.infer<typeof Route>
 export type Sector = z.infer<typeof Sector>
 export type Area = z.infer<typeof Area>
 export type Hardware = z.infer<typeof Hardware>
+export type Crag = z.infer<typeof Crag>
 export type Dataset = z.infer<typeof Dataset>
