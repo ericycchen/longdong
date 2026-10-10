@@ -39,6 +39,10 @@ const LEGEND = /^(?:\d{3}|Ti)-[A-Za-z0-9]+$|^統計$/
 
 export interface ParsedArea extends Area {
   warnings: string[]
+  /** 有「路線ID」欄時，缺 ID 或格式錯誤的路線（匯入應中止） */
+  idErrors: string[]
+  /** 分頁是否有「路線ID」欄 */
+  hasIdColumn: boolean
 }
 
 export interface AreaSheetOptions {
@@ -50,16 +54,20 @@ export interface AreaSheetOptions {
   safety?: Map<number, Safety | null>
 }
 
+/** Apps Script 產生的路線ID：6 碼，不含 0/o、1/l/i（見 apps-script/RouteIds.gs） */
+export const ROUTE_ID = /^[2-9a-hjkmnp-z]{6}$/
+
 /**
  * ID 規則（使用者的收藏與攀登紀錄會用到，發布後不可再改）：
- *   區域  <crag>/<area>            longdong/back-door
- *   路線  <crag>/<路線編號>         longdong/523、longdong/100.1
- *   未編號 <crag>/x-<雜湊>          由「區域＋中文名稱」產生，Sheet 上調整順序也不會變
+ *   區域  <crag>/<area>              longdong/back-door
+ *   路線  <crag>/<路線ID 欄>          longdong/7kq2mx（Sheet 的「路線ID」欄，由 Apps Script 產生）
+ * Sheet 還沒有「路線ID」欄時，暫用舊規則：<crag>/<路線編號>，未編號者 <crag>/x-<區域＋名稱雜湊>
  */
 export function parseAreaSheet(text: string, opts: AreaSheetOptions): ParsedArea {
   const { cragId, areaId, expectedZh, safety = new Map() } = opts
   const rows = readCsv(text)
   const warnings: string[] = []
+  const idErrors: string[] = []
 
   const title = splitName(rows[0]?.[0])
   if (!title || title.zh !== expectedZh) {
@@ -91,6 +99,7 @@ export function parseAreaSheet(text: string, opts: AreaSheetOptions): ParsedArea
     statusDate: col('日期'),
     notes: col('備註'),
   }
+  const idCol = header.indexOf('路線ID')
   const boltCols = header.flatMap((h, i) => (/^B\d{2}$/.test(h) ? [i] : []))
   const anchorCols = header.flatMap((h, i) => (/^A\d{2}$/.test(h) ? [i] : []))
   const hardwareCols: number[] = []
@@ -155,9 +164,18 @@ export function parseAreaSheet(text: string, opts: AreaSheetOptions): ParsedArea
     const anchors = anchorCols.flatMap((c) => parseBolt(header[c], columnValues(c)))
     const anchorHardware = hardwareCols.flatMap((c) => parseHardwareColumn(columnValues(c)))
 
+    const routeId = (): string => {
+      if (idCol < 0) return number ? `${cragId}/${number}` : `${cragId}/x-${stableHash(`${areaId}|${name.zh}`)}`
+      const code = cell(idCol)
+      if (!ROUTE_ID.test(code)) {
+        idErrors.push(`[${areaId}] 第 ${block.line} 列 #${number ?? '0'} ${name.zh}：${code ? `路線ID「${code}」格式不對` : '缺少路線ID'}`)
+      }
+      return `${cragId}/${code || `missing-${block.line}`}`
+    }
+
     const statusLabel = cell(C.status) || undefined
     const route: Route = {
-      id: number ? `${cragId}/${number}` : `${cragId}/x-${stableHash(`${areaId}|${name.zh}`)}`,
+      id: routeId(),
       number,
       isFixture: !grade && !type,
       pitch: parsePitch(name.zh),
@@ -206,6 +224,8 @@ export function parseAreaSheet(text: string, opts: AreaSheetOptions): ParsedArea
     notes,
     sectors,
     warnings,
+    idErrors,
+    hasIdColumn: idCol >= 0,
   }
 }
 

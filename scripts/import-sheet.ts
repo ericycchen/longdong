@@ -13,6 +13,8 @@ import { dirname, join, resolve } from 'node:path'
 import { Dataset, type Area } from '../src/data/schema'
 import { parseAreaSheet, parseHardwareSheet } from './lib/parse'
 import { htmlUrl, parseSafetyHtml } from './lib/safety'
+import { checkRouteIds, type IdSource, type PreviousIds } from './lib/ids'
+import { RETIRED_ROUTE_IDS } from './retired-ids'
 import { AREA_TABS, CRAG, DATA_ATTRIBUTION, DATA_LICENSE, PROJECT_URL, SHEET_ID, SHEET_URL, STATS_GID, csvUrl } from './sheet.config'
 
 const OUT = resolve(import.meta.dirname, '../public/data/longdong.json')
@@ -50,24 +52,39 @@ async function main() {
 
   const hardware = parseHardwareSheet(hardwareCsv)
   const warnings: string[] = []
+  const idErrors: string[] = []
+  const withIdColumn: string[] = []
   const areas: Area[] = AREA_TABS.map((tab, i) => {
     const { ratings, unreadable } = parseSafetyHtml(areaHtmls[i], tab.gid)
     if (ratings.size === 0) throw new Error(`[${tab.id}] htmlview 裡找不到任何安全評級燈號，Sheet 版面可能變了`)
     for (const row of unreadable) warnings.push(`[${tab.id}] 第 ${row + 1} 列：安全評級燈號無法判讀`)
-    const { warnings: w, ...area } = parseAreaSheet(areaCsvs[i], {
+    const { warnings: w, idErrors: e, hasIdColumn, ...area } = parseAreaSheet(areaCsvs[i], {
       cragId: CRAG.id,
       areaId: tab.id,
       expectedZh: tab.zh,
       safety: ratings,
     })
     warnings.push(...w)
+    idErrors.push(...e)
+    if (hasIdColumn) withIdColumn.push(tab.zh)
     return area
   })
 
-  // 路線編號在全龍洞應該唯一。多繩距路線的各段可能共用編號（例如 #242 P1、P2），
+  // 所有區域分頁都有「路線ID」欄才改用它；只有部分分頁有，代表 Apps Script 還沒跑完
+  if (withIdColumn.length > 0 && withIdColumn.length < AREA_TABS.length) {
+    throw new Error(
+      `只有部分分頁有「路線ID」欄（${withIdColumn.join('、')}），請在 Sheet 執行「路線ID → 補上缺少的 ID」`,
+    )
+  }
+  const idSource: IdSource = withIdColumn.length ? 'sheet' : 'legacy'
+  if (idErrors.length) {
+    throw new Error(`以下路線的路線ID有問題，請在 Sheet 執行「路線ID → 補上缺少的 ID」：\n  ${idErrors.join('\n  ')}`)
+  }
+
+  // 舊規則：路線編號在全龍洞應該唯一。多繩距路線的各段可能共用編號（例如 #242 P1、P2），
   // 以 -p<段數> 區分；其他重複則加序號並提出警告
   const seen = new Map<string, number>()
-  for (const route of areas.flatMap((a) => a.sectors.flatMap((s) => s.routes))) {
+  for (const route of idSource === 'legacy' ? areas.flatMap((a) => a.sectors.flatMap((s) => s.routes)) : []) {
     const n = (seen.get(route.id) ?? 0) + 1
     seen.set(route.id, n)
     if (n === 1) continue
@@ -84,6 +101,7 @@ async function main() {
   const content = {
     schemaVersion: 2 as const,
     crag: CRAG,
+    idSource,
     source: { sheetId: SHEET_ID, url: SHEET_URL, attribution: DATA_ATTRIBUTION, projectUrl: PROJECT_URL },
     license: DATA_LICENSE,
     hardware,
@@ -91,8 +109,16 @@ async function main() {
   }
   const version = createHash('sha256').update(JSON.stringify(content)).digest('hex').slice(0, 12)
 
-  const previous = existsSync(OUT) ? (JSON.parse(readFileSync(OUT, 'utf8')) as { version?: string; updatedAt?: string }) : undefined
+  const previous = existsSync(OUT) ? (JSON.parse(readFileSync(OUT, 'utf8')) as Partial<Dataset>) : undefined
   const changed = previous?.version !== version
+
+  const previousIds: PreviousIds | undefined = previous && {
+    idSource: previous.idSource,
+    routeIds: (previous.areas ?? []).flatMap((a) => a.sectors.flatMap((s) => s.routes.map((r) => r.id))),
+  }
+  const allRoutes = areas.flatMap((a) => a.sectors.flatMap((s) => s.routes))
+  const idCheck = checkRouteIds(idSource, allRoutes, previousIds, RETIRED_ROUTE_IDS)
+  if (idCheck.length) throw new Error(`路線ID 檢查未通過：\n  ${idCheck.join('\n  ')}`)
 
   const dataset = Dataset.parse({
     version,

@@ -27,16 +27,14 @@ public/data/longdong.json（commit 進 repo，每次變動都有 diff 可查）
 
 ## 路線 ID
 
-使用者的收藏與攀登紀錄以路線 ID 指向路線，**ID 發布後不可再改**：
+使用者的收藏與攀登紀錄以路線 ID 指向路線，**ID 發布後不可再改**。
 
-| 項目 | 格式 | 例 |
-|---|---|---|
-| 區域 | `<岩場>/<區域>` | `longdong/back-door` |
-| 路線 | `<岩場>/<路線編號>` | `longdong/523`、`longdong/100.1` |
-| 同編號的多段繩距 | `<岩場>/<編號>-p<段>` | `longdong/242-p2` |
-| 未編號項目 | `<岩場>/x-<雜湊>`（由區域＋中文名稱產生） | `longdong/x-13fa9b8b` |
+- 路線：`<岩場>/<路線ID>`，例如 `longdong/7kq2mx`。「路線ID」是 Sheet 上的一欄，由 [Apps Script](apps-script/README.md) 自動產生，改名、改編號都不會變。
+- 區域：`<岩場>/<區域>`，例如 `longdong/back-door`。
+- Sheet 還沒有「路線ID」欄時，暫用路線編號產生（`longdong/523`），資料檔的 `idSource` 為 `legacy`。
 
-未編號項目改名會改變 ID，建議在 Sheet 上給正式編號。早期沒有岩場前綴的網址（`#/route/r523`）會自動轉到新 ID。
+匯入程式的防呆：缺 ID、ID 重複、已發布的 ID 消失，都會停止匯入，網站維持上一版資料。
+確定要移除的路線，在 `scripts/retired-ids.ts` 登記其 ID。
 
 ## 個人資料
 

@@ -106,6 +106,8 @@ export const Crag = z.object({
 export const Dataset = z.object({
   schemaVersion: z.literal(2),
   crag: Crag,
+  /** 路線ID 來源：legacy 為依路線編號產生（過渡期），sheet 為 Sheet 上「路線ID」欄（固定不變） */
+  idSource: z.enum(['legacy', 'sheet']),
   /** 內容雜湊，資料沒變時維持不變 */
   version: z.string(),
   /** 資料內容最後一次變動的時間（ISO 8601） */
