@@ -121,22 +121,6 @@ h2 .en {
   margin-right: auto;
 }
 
-.about-link {
-  color: inherit;
-}
-
-.net {
-  font-size: 0.75rem;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.18);
-}
-
-.net.off {
-  background: var(--accent);
-  color: #fff;
-}
-
 main {
   max-width: 760px;
   margin: 0 auto;

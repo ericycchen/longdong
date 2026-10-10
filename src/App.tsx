@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import { useData } from './data/dataset'
 import { relativeTime } from './format'
@@ -11,7 +10,6 @@ import { href, usePage } from './router'
 export function App() {
   const page = usePage()
   const state = useData()
-  const online = useOnline()
   const {
     offlineReady: [offlineReady],
     needRefresh: [needRefresh],
@@ -23,10 +21,6 @@ export function App() {
       <header className="topbar">
         <a className="brand" href={href.home()}>
           龍洞攀岩資料庫
-        </a>
-        <span className={`net ${online ? 'on' : 'off'}`}>{online ? '連線中' : '離線'}</span>
-        <a className="about-link" href={href.about()}>
-          關於
         </a>
       </header>
 
@@ -67,23 +61,9 @@ export function App() {
             {state.data.dataset.source.attribution}
           </a>
           <br />
-          僅供參考，攀登前請自行確認現場狀況
+          僅供參考，攀登前請自行確認現場狀況 · <a href={href.about()}>關於與說明</a>
         </footer>
       )}
     </>
   )
-}
-
-function useOnline(): boolean {
-  const [online, setOnline] = useState(() => navigator.onLine)
-  useEffect(() => {
-    const update = () => setOnline(navigator.onLine)
-    window.addEventListener('online', update)
-    window.addEventListener('offline', update)
-    return () => {
-      window.removeEventListener('online', update)
-      window.removeEventListener('offline', update)
-    }
-  }, [])
-  return online
 }
