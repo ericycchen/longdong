@@ -8,6 +8,9 @@ const appsScript = createRequire(import.meta.url)('../apps-script/RouteIds.gs') 
   randomId: () => string
   newUniqueId: (used: Record<string, boolean>) => string
   isRouteRow: (no: string, name: string) => boolean
+  resolveRowId: (current: string, candidates: string[], isUsed: (id: string) => boolean) => { id: string | null }
+  normalizeNumber: (raw: string) => string
+  zhName: (raw: string) => string
 }
 
 describe('Apps Script', () => {
@@ -26,6 +29,38 @@ describe('Apps Script', () => {
     expect(appsScript.isRouteRow('314.1', '左翼')).toBe(true)
     expect(appsScript.isRouteRow('', '')).toBe(false)
     expect(appsScript.isRouteRow('316-TW', '316 - 台製')).toBe(false)
+  })
+})
+
+describe('Apps Script 還原 ID', () => {
+  const none = () => false
+
+  it('改掉或清除時，還原成編輯前的值', () => {
+    expect(appsScript.resolveRowId('zzzzzz', ['7kq2mx'], none)).toEqual({ id: '7kq2mx' })
+    expect(appsScript.resolveRowId('', ['7kq2mx'], none)).toEqual({ id: '7kq2mx' })
+  })
+
+  it('沒有編輯前的值時，用已發布資料中的 ID', () => {
+    expect(appsScript.resolveRowId('', ['h3w9tc'], none)).toEqual({ id: 'h3w9tc' })
+  })
+
+  it('候選 ID 已被別列使用時不採用（例如複製整列新增路線）', () => {
+    const used = (id: string) => id === '7kq2mx'
+    expect(appsScript.resolveRowId('7kq2mx', [], used)).toEqual({ id: null })
+    expect(appsScript.resolveRowId('', ['7kq2mx', 'h3w9tc'], used)).toEqual({ id: 'h3w9tc' })
+  })
+
+  it('沒有候選時保留格式正確的現有值，否則產生新的', () => {
+    expect(appsScript.resolveRowId('7kq2mx', [], none)).toEqual({ id: '7kq2mx' })
+    expect(appsScript.resolveRowId('ABC', [], none)).toEqual({ id: null })
+  })
+
+  it('編號與名稱的正規化和匯入程式一致', () => {
+    expect(appsScript.normalizeNumber('# 523')).toBe('523')
+    expect(appsScript.normalizeNumber('0.00')).toBe('')
+    expect(appsScript.zhName('⽯花凍 | P1\nAgar Jelly | P1')).toBe('石花凍 | P1')
+    expect(appsScript.zhName('第一洞內\n南面\nInterior\nSouth End')).toBe('第一洞內 南面')
+    expect(appsScript.zhName('Sorry Erica')).toBe('Sorry Erica')
   })
 })
 
