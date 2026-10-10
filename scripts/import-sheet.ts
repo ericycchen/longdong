@@ -8,12 +8,12 @@
  * 內容沒有變動時不會改寫檔案，避免每次排程都產生 commit。
  */
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
+import { appendFileSync, existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { Dataset, type Area } from '../src/data/schema'
 import { parseAreaSheet, parseHardwareSheet } from './lib/parse'
 import { htmlUrl, parseSafetyHtml } from './lib/safety'
-import { checkRouteIds, type IdSource, type PreviousIds } from './lib/ids'
+import { checkRouteIds, publishedRoutes, type IdSource, type PreviousIds } from './lib/ids'
 import { RETIRED_ROUTE_IDS } from './retired-ids'
 import { AREA_TABS, CRAG, DATA_ATTRIBUTION, DATA_LICENSE, PROJECT_URL, SHEET_ID, SHEET_URL, STATS_GID, csvUrl } from './sheet.config'
 
@@ -114,11 +114,11 @@ async function main() {
 
   const previousIds: PreviousIds | undefined = previous && {
     idSource: previous.idSource,
-    routeIds: (previous.areas ?? []).flatMap((a) => a.sectors.flatMap((s) => s.routes.map((r) => r.id))),
+    routes: publishedRoutes(previous.areas ?? []),
   }
-  const allRoutes = areas.flatMap((a) => a.sectors.flatMap((s) => s.routes))
-  const idCheck = checkRouteIds(idSource, allRoutes, previousIds, RETIRED_ROUTE_IDS)
-  if (idCheck.length) throw new Error(`路線ID 檢查未通過：\n  ${idCheck.join('\n  ')}`)
+  const idCheck = checkRouteIds(idSource, publishedRoutes(areas), previousIds, RETIRED_ROUTE_IDS)
+  if (idCheck.errors.length) throw new Error(`路線ID 檢查未通過：\n  ${idCheck.errors.join('\n  ')}`)
+  const removedNote = idCheck.removed.map((r) => `#${r.number ?? '0'} ${r.name}（${r.id}）`)
 
   const dataset = Dataset.parse({
     version,
@@ -133,6 +133,10 @@ async function main() {
     const count = a.sectors.reduce((n, s) => n + s.routes.length, 0)
     const flag = a.summary.routes !== undefined && a.summary.routes !== count ? `（表頭寫 ${a.summary.routes}）` : ''
     console.log(`  ${a.name.zh.padEnd(4, '　')} ${String(count).padStart(3)} 條${flag}`)
+  }
+  if (removedNote.length) {
+    console.log(`\n已從 Sheet 刪除的路線 ${removedNote.length} 條：`)
+    for (const n of removedNote) console.log(`  - ${n}`)
   }
   if (warnings.length) {
     console.log(`\n警告 ${warnings.length} 則：`)
@@ -150,6 +154,13 @@ async function main() {
   }
   mkdirSync(dirname(OUT), { recursive: true })
   writeFileSync(OUT, JSON.stringify(dataset) + '\n')
+  // 給 GitHub Actions：刪除的路線寫進 commit 訊息與執行摘要，事後查得到
+  if (removedNote.length) {
+    const note = `刪除的路線：\n${removedNote.map((n) => `- ${n}`).join('\n')}\n`
+    mkdirSync(resolve(import.meta.dirname, '../.cache'), { recursive: true })
+    writeFileSync(resolve(import.meta.dirname, '../.cache/import-notes.txt'), note)
+    if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### ${note}`)
+  }
   console.log(`\n已寫入 ${OUT}（version ${version}）`)
 }
 

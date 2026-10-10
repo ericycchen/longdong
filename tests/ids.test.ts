@@ -1,8 +1,7 @@
 import { createRequire } from 'node:module'
 import Papa from 'papaparse'
 import { describe, expect, it } from 'vitest'
-import type { Route } from '../src/data/schema'
-import { checkRouteIds } from '../scripts/lib/ids'
+import { MAX_REMOVALS_PER_IMPORT, checkRouteIds, type PublishedRoute } from '../scripts/lib/ids'
 import { ROUTE_ID, parseAreaSheet } from '../scripts/lib/parse'
 
 const appsScript = createRequire(import.meta.url)('../apps-script/RouteIds.gs') as {
@@ -10,9 +9,6 @@ const appsScript = createRequire(import.meta.url)('../apps-script/RouteIds.gs') 
   newUniqueId: (used: Record<string, boolean>) => string
   isRouteRow: (no: string, name: string) => boolean
 }
-
-const route = (id: string, zh = id): Route =>
-  ({ id, isFixture: false, name: { zh }, bolts: [], anchors: [], anchorHardware: [] }) as Route
 
 describe('Apps Script', () => {
   it('產生的 ID 符合匯入程式的格式', () => {
@@ -62,21 +58,42 @@ describe('parseAreaSheet 讀取「路線ID」欄', () => {
 })
 
 describe('checkRouteIds', () => {
-  it('Sheet ID 不可重複', () => {
-    expect(checkRouteIds('sheet', [route('longdong/aaaaaa', '甲'), route('longdong/aaaaaa', '乙')], undefined, [])).toEqual([
-      '路線ID longdong/aaaaaa 重複：甲、乙',
-    ])
+  const pr = (id: string, number: string, name = `路線${number}`, areaId = 'longdong/back-door'): PublishedRoute => ({
+    id: `longdong/${id}`, areaId, number, name,
+  })
+  const prev = (routes: PublishedRoute[]) => ({ idSource: 'sheet' as const, routes })
+
+  it('ID 不可重複', () => {
+    const { errors } = checkRouteIds('sheet', [pr('aaaaaa', '1', '甲'), pr('aaaaaa', '2', '乙')], undefined)
+    expect(errors).toEqual(['路線ID longdong/aaaaaa 重複：甲、乙'])
   })
 
   it('從舊規則切換時不檢查消失', () => {
-    const prev = { idSource: 'legacy' as const, routeIds: ['longdong/523'] }
-    expect(checkRouteIds('sheet', [route('longdong/7kq2mx')], prev, [])).toEqual([])
+    const old = { idSource: 'legacy' as const, routes: [{ ...pr('x', '523'), id: 'longdong/523' }] }
+    expect(checkRouteIds('sheet', [pr('7kq2mx', '523')], old)).toEqual({ errors: [], removed: [] })
   })
 
-  it('已發布的 Sheet ID 消失時擋下，列入 retired 則放行', () => {
-    const prev = { idSource: 'sheet' as const, routeIds: ['longdong/7kq2mx', 'longdong/h3w9tc'] }
-    const now = [route('longdong/7kq2mx')]
-    expect(checkRouteIds('sheet', now, prev, [])).toHaveLength(1)
-    expect(checkRouteIds('sheet', now, prev, ['longdong/h3w9tc'])).toEqual([])
+  it('刪除路線直接放行，並列出刪掉了哪些', () => {
+    const { errors, removed } = checkRouteIds('sheet', [pr('7kq2mx', '1')], prev([pr('7kq2mx', '1'), pr('h3w9tc', '2')]))
+    expect(errors).toEqual([])
+    expect(removed.map((r) => r.id)).toEqual(['longdong/h3w9tc'])
+  })
+
+  it('改名、改編號不影響（ID 還在）', () => {
+    const { errors, removed } = checkRouteIds('sheet', [pr('7kq2mx', '610', '新名字')], prev([pr('7kq2mx', '523', '舊名字')]))
+    expect(errors).toEqual([])
+    expect(removed).toEqual([])
+  })
+
+  it('同一條路線的 ID 被改掉時擋下，並提示原本的 ID', () => {
+    const { errors } = checkRouteIds('sheet', [pr('zzzzzz', '1', 'ㄅ')], prev([pr('ygapmg', '1', 'ㄅ')]))
+    expect(errors).toEqual(['#1 ㄅ 的路線ID 從 ygapmg 變成 zzzzzz，請在 Sheet 把它改回 ygapmg'])
+  })
+
+  it('一次消失太多條視為誤刪，列入 allowRemoved 則放行', () => {
+    const many = Array.from({ length: MAX_REMOVALS_PER_IMPORT + 1 }, (_, i) => pr(`gone${'abcdefghjkmn'[i]}a`, String(100 + i)))
+    const { errors } = checkRouteIds('sheet', [], prev(many))
+    expect(errors[0]).toMatch(/疑似誤刪/)
+    expect(checkRouteIds('sheet', [], prev(many), many.map((r) => r.id)).errors).toEqual([])
   })
 })

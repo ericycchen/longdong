@@ -33,8 +33,8 @@ public/data/longdong.json（commit 進 repo，每次變動都有 diff 可查）
 - 區域：`<岩場>/<區域>`，例如 `longdong/back-door`。
 - Sheet 還沒有「路線ID」欄時，暫用路線編號產生（`longdong/523`），資料檔的 `idSource` 為 `legacy`。
 
-匯入程式的防呆：缺 ID、ID 重複、已發布的 ID 消失，都會停止匯入，網站維持上一版資料。
-確定要移除的路線，在 `scripts/retired-ids.ts` 登記其 ID。
+匯入程式的防呆（見 `scripts/lib/ids.ts`）：缺 ID、ID 重複、同一條路線的 ID 被改掉，都會停止匯入，網站維持上一版資料。
+在 Sheet 刪除路線會自動放行並記在 commit 訊息；一次刪超過 10 條視為誤刪，需在 `scripts/retired-ids.ts` 確認。
 
 ## 個人資料
 
