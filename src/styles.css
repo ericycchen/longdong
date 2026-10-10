@@ -740,3 +740,18 @@ main {
 .error {
   color: var(--danger);
 }
+
+.row-with-action {
+  display: flex;
+  align-items: center;
+}
+
+.row-with-action > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.row-with-action > .link-button {
+  margin: 0;
+  padding: 10px 12px;
+}

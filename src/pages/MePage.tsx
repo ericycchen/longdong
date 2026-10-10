@@ -4,7 +4,7 @@ import { RouteRow } from '../components/RouteRow'
 import { formatDate } from '../format'
 import { downloadFile, ticksToCsv } from '../personal/files'
 import { TICK_STYLE_LABEL, isSent, parseExport, today } from '../personal/model'
-import { exportAll, importAll, usePersonal } from '../personal/store'
+import { deleteTick, exportAll, importAll, setFavorite, usePersonal } from '../personal/store'
 import { signIn, signOut, useCloud } from '../personal/sync'
 import { relativeTime } from '../format'
 import { href } from '../router'
@@ -91,7 +91,7 @@ export function MePage({ data }: { data: LoadedData }) {
             {personal.ticks.map((t) => {
               const ref = lookup(t.routeId)
               return (
-                <li key={t.id}>
+                <li key={t.id} className="row-with-action">
                   <a className="tick-row" href={href.route(t.routeId)}>
                     <span className="tick-date">{formatDate(t.date)}</span>
                     <span className="route-name">
@@ -105,6 +105,13 @@ export function MePage({ data }: { data: LoadedData }) {
                     </span>
                     <span className="grade">{ref?.route.grade}</span>
                   </a>
+                  <button
+                    className="link-button"
+                    aria-label="刪除這筆紀錄"
+                    onClick={() => confirm('刪除這筆攀登紀錄？') && deleteTick(t.id)}
+                  >
+                    刪除
+                  </button>
                 </li>
               )
             })}
@@ -121,8 +128,11 @@ export function MePage({ data }: { data: LoadedData }) {
               return ref ? (
                 <RouteRow key={id} item={ref} showPlace />
               ) : (
-                <li key={id} className="muted small route-row">
-                  找不到路線（{id}）
+                <li key={id} className="row-with-action">
+                  <span className="tick-row muted small">找不到路線（{id}）</span>
+                  <button className="link-button" onClick={() => setFavorite(id, false)}>
+                    移除
+                  </button>
                 </li>
               )
             })}
