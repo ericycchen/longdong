@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { favoritePath, reconcile, tickPath, clean, type RemotePersonal } from './reconcile'
 import { applyRecords, clearAll, exportAll, onLocalWrite } from './store'
+import { setLocalProfile } from '../social/store'
 
 /**
  * 雲端同步：登入 Google 後，收藏與攀登紀錄自動同步到 Firebase（/v2/personal/<uid>）。
@@ -94,12 +95,21 @@ export async function signIn(): Promise<void> {
   }
 }
 
+/** 登出：收藏與紀錄都在雲端，清除這台裝置上的副本 */
 export async function signOut(): Promise<void> {
   const m = await load()
   stopRemote?.()
   stopRemote = undefined
   await m.signOutUser()
   storage.set(ENABLED_KEY, null)
+  storage.set(LAST_UID_KEY, null)
+  await clearAll()
+}
+
+/** 已登入時回傳 Firebase 模組與 uid，給評分、留言等寫入功能使用 */
+export async function withCloud(): Promise<{ m: FirebaseModule; uid: string }> {
+  if (state.status !== 'signed-in' || !state.user || !fb) throw new Error('請先登入')
+  return { m: await fb, uid: state.user.uid }
 }
 
 async function onUser(m: FirebaseModule, user: import('./firebase').User | null) {
@@ -110,16 +120,12 @@ async function onUser(m: FirebaseModule, user: import('./firebase').User | null)
     return
   }
 
-  // 這台裝置上的紀錄原本屬於另一個帳號：問使用者要不要合併過去
-  const lastUid = storage.get(LAST_UID_KEY)
-  if (lastUid && lastUid !== user.uid) {
-    const local = await exportAll()
-    const hasData = local.favorites.some((f) => !f.deleted) || local.ticks.some((t) => !t.deleted)
-    if (hasData && !confirm('這台裝置上有另一個帳號的收藏和攀登紀錄。\n要合併到現在登入的帳號嗎？\n（選「取消」會先清除這台裝置上的紀錄，再載入此帳號的資料）')) {
-      await clearAll()
-    }
-  }
+  // 紀錄只在登入時使用：裝置上若留有別的帳號的資料，先清掉再載入這個帳號的
+  if (storage.get(LAST_UID_KEY) !== user.uid) await clearAll()
   storage.set(LAST_UID_KEY, user.uid)
+  m.ensureProfile(user.uid, user.displayName ?? '')
+    .then((profile) => setLocalProfile(user.uid, profile))
+    .catch((err: Error) => console.warn('profile', err))
 
   set({
     status: 'signed-in',

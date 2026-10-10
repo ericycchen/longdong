@@ -64,31 +64,6 @@ export function mergeRecords<T extends Syncable>(current: T[], incoming: T[], ke
   return { merged: [...byKey.values()], changed }
 }
 
-const TICK_STYLE_VALUES = new Set(TICK_STYLES.map((s) => s.value))
-
-/** 檢查並整理匯入的備份檔；格式不對時丟出可以直接顯示給使用者的錯誤 */
-export function parseExport(raw: unknown): PersonalExport {
-  const fail = (why: string): never => {
-    throw new Error(`這不是有效的備份檔（${why}）`)
-  }
-  if (!raw || typeof raw !== 'object') fail('不是 JSON 物件')
-  const data = raw as Record<string, unknown>
-  if (data.format !== 'longdong-personal') fail('檔案格式不符')
-  if (data.version !== 1) fail(`不支援的版本 ${String(data.version)}`)
-  const isStr = (v: unknown): v is string => typeof v === 'string' && v.length > 0
-  const favorites = Array.isArray(data.favorites) ? data.favorites : fail('缺少收藏資料')
-  const ticks = Array.isArray(data.ticks) ? data.ticks : fail('缺少攀登紀錄')
-  for (const f of favorites as Favorite[]) {
-    if (!isStr(f?.routeId) || !isStr(f.updatedAt) || !isStr(f.createdAt)) fail('收藏資料欄位不完整')
-  }
-  for (const t of ticks as Tick[]) {
-    if (!isStr(t?.id) || !isStr(t.routeId) || !/^\d{4}-\d{2}-\d{2}$/.test(t.date) || !TICK_STYLE_VALUES.has(t.style))
-      fail('攀登紀錄欄位不完整')
-    if (!isStr(t.updatedAt) || !isStr(t.createdAt)) fail('攀登紀錄缺少時間')
-  }
-  return data as unknown as PersonalExport
-}
-
 export function newId(): string {
   // iOS 15.4 以前沒有 randomUUID
   if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()

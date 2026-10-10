@@ -2,15 +2,22 @@ import type { RouteRef } from '../data/dataset'
 import { typeText } from '../format'
 import { isSent } from '../personal/model'
 import { usePersonal } from '../personal/store'
+import { useCloud } from '../personal/sync'
+import { routeKey, summarize } from '../social/model'
+import { useSocial } from '../social/store'
 import { href } from '../router'
 import { SafetyLight } from './SafetyLight'
+import { StarsBadge } from './Stars'
 import { StatusBadge } from './StatusBadge'
 
 export function RouteRow({ item, showPlace = false }: { item: RouteRef; showPlace?: boolean }) {
   const { route, sector, area } = item
   const personal = usePersonal()
-  const favorite = personal.favorites.has(route.id)
-  const sent = personal.ticks.some((t) => t.routeId === route.id && isSent(t.style))
+  const signedIn = useCloud().status === 'signed-in'
+  const rating = summarize(useSocial().ratings[routeKey(route.id)])
+  const favorite = signedIn && personal.favorites.has(route.id)
+  const sent = signedIn && personal.ticks.some((t) => t.routeId === route.id && isSent(t.style))
+
   return (
     <li>
       <a className="route-row" href={href.route(route.id)}>
@@ -38,7 +45,10 @@ export function RouteRow({ item, showPlace = false }: { item: RouteRef; showPlac
             {route.grade && <span className="grade">{route.grade}</span>}
           </span>
           <span className="type">{typeText(route)}</span>
-          {route.status && <StatusBadge status={route.status} compact />}
+          <span className="meta-line">
+            <StarsBadge summary={rating} />
+            {route.status && <StatusBadge status={route.status} compact />}
+          </span>
         </span>
       </a>
     </li>

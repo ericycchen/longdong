@@ -31,6 +31,18 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,json}'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         navigateFallback: 'index.html',
+        // 評分、留言、暱稱：有網路時讀最新，離線時用最後一次讀到的
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/longdong\.firebaseio\.com\/v2\/(ratings|comments|profiles)/,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'social',
+              networkTimeoutSeconds: 4,
+              expiration: { maxEntries: 500, maxAgeSeconds: 60 * 60 * 24 * 30 },
+            },
+          },
+        ],
       },
     }),
   ],

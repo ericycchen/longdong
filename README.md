@@ -36,11 +36,22 @@ public/data/longdong.json（commit 進 repo，每次變動都有 diff 可查）
 匯入程式的防呆（見 `scripts/lib/ids.ts`）：缺 ID、ID 重複、同一條路線的 ID 被改掉，都會停止匯入，網站維持上一版資料。
 在 Sheet 刪除路線會自動放行並記在 commit 訊息；一次刪超過 10 條視為誤刪，需在 `scripts/retired-ids.ts` 確認。
 
-## 個人資料
+## 帳號、紀錄與社群功能
 
-收藏與攀登紀錄只存在使用者瀏覽器的 IndexedDB（`src/personal/`），沒有帳號、不上傳。
-每筆紀錄有唯一 ID、`updatedAt` 與刪除標記，匯入備份或日後同步雲端時以「較新者為準」合併。
-使用者可在「我的紀錄」頁匯出 JSON 備份、匯入，或匯出 CSV。
+使用舊站的 Firebase 專案（`longdong`），新資料都在 `/v2` 底下，與舊站的路徑分開；規則見 [`firebase/database.rules.json`](firebase/database.rules.json)，以 `firebase deploy --only database` 部署。
+
+| 路徑 | 內容 | 讀取 | 寫入 |
+|---|---|---|---|
+| `v2/personal/<uid>` | 收藏、攀登紀錄 | 本人 | 本人 |
+| `v2/profiles/<uid>` | 暱稱 | 公開 | 本人 |
+| `v2/ratings/<路線>/<uid>` | 1–5 星、體感難度 | 公開 | 本人 |
+| `v2/comments/<路線>/<id>` | 留言 | 公開 | 新增：本人；刪除：本人；不可修改 |
+| `v2/reports/<id>` | 檢舉 | 管理員 | 登入者新增 |
+
+- 收藏與攀登紀錄需要登入。本機（IndexedDB）是主要資料來源，離線也能記錄；連上雲端時雙向合併，同一筆以 `updatedAt` 較新者為準（`src/personal/`）。登出會清除裝置上的副本。
+- 評分、留言、暱稱以 REST 讀取（不需載入 Firebase SDK），Service Worker 快取最後一次讀到的內容；寫入需登入（`src/social/`）。
+- Firebase SDK 只在登入過的裝置載入。
+- 舊站規則中 `role` 底下的帳號對整個資料庫有讀寫權，可用來隱藏不當留言（設 `hidden: true`）。
 
 ## 開發
 

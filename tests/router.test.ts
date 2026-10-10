@@ -15,6 +15,7 @@ describe('parseHash', () => {
 
   it('其他頁面', () => {
     expect(parseHash('#/me')).toEqual({ name: 'me' })
+    expect(parseHash('#/search?q=5.12')).toEqual({ name: 'search' })
     expect(parseHash('#/?q=5.12')).toEqual({ name: 'home' })
     expect(parseHash('')).toEqual({ name: 'home' })
   })

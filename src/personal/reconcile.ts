@@ -1,3 +1,4 @@
+import { routeKey } from '../social/model'
 import { mergeRecords, type Favorite, type Tick } from './model'
 
 /** 雲端（Realtime Database）上一個使用者的資料：/v2/personal/<uid> */
@@ -6,10 +7,8 @@ export interface RemotePersonal {
   ticks?: Record<string, Tick>
 }
 
-/** Realtime Database 的 key 不能含 "/" "."：longdong/328ac2 → longdong:328ac2 */
-export function favoriteKey(routeId: string): string {
-  return routeId.replace(/\//g, ':').replace(/\./g, ',')
-}
+/** 收藏以路線 key 存放（與評分、留言相同規則） */
+export const favoriteKey = routeKey
 
 export function favoritePath(uid: string, routeId: string): string {
   return `v2/personal/${uid}/favorites/${favoriteKey(routeId)}`

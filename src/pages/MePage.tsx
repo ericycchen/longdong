@@ -1,30 +1,51 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import type { LoadedData } from '../data/dataset'
 import { RouteRow } from '../components/RouteRow'
-import { formatDate } from '../format'
-import { downloadFile, ticksToCsv } from '../personal/files'
-import { TICK_STYLE_LABEL, isSent, parseExport, today } from '../personal/model'
-import { deleteTick, exportAll, importAll, setFavorite, usePersonal } from '../personal/store'
-import { signIn, signOut, useCloud } from '../personal/sync'
-import { relativeTime } from '../format'
+import { SignInPrompt } from '../components/SignInPrompt'
+import { formatDate, relativeTime } from '../format'
+import { TICK_STYLE_LABEL, isSent } from '../personal/model'
+import { deleteTick, setFavorite, usePersonal } from '../personal/store'
+import { signOut, useCloud } from '../personal/sync'
+import { rename } from '../social/actions'
+import { NAME_MAX } from '../social/model'
+import { displayName, useSocial } from '../social/store'
 import { href } from '../router'
 
 type Tab = 'ticks' | 'favorites'
 
 export function MePage({ data }: { data: LoadedData }) {
-  const personal = usePersonal()
-  const [tab, setTab] = useState<Tab>('ticks')
-  const [message, setMessage] = useState<string>()
-  const fileInput = useRef<HTMLInputElement>(null)
+  const cloud = useCloud()
 
-  if (personal.error) {
-    return (
-      <div className="empty">
-        <p>這個瀏覽器無法儲存個人資料（{personal.error}）。</p>
-        <p className="muted small">私密瀏覽模式通常不支援，請改用一般模式。</p>
-      </div>
-    )
-  }
+  return (
+    <>
+      <h1>我的</h1>
+      {cloud.status === 'signed-in' && cloud.user ? (
+        <SignedIn data={data} uid={cloud.user.uid} email={cloud.user.email} />
+      ) : cloud.status === 'loading' ? (
+        <p className="empty muted">載入中…</p>
+      ) : (
+        <section className="intro-card">
+          <h2>登入後可以</h2>
+          <ul>
+            <li>記錄攀登：日期、Onsight／Flash／Redpoint、心得</li>
+            <li>收藏想爬的路線</li>
+            <li>替路線評分、留言分享 beta 與現場狀況</li>
+            <li>在手機和電腦之間自動同步，沒網路時也能記錄</li>
+          </ul>
+          <SignInPrompt message="用 Google 帳號登入，Email 不會公開。" />
+        </section>
+      )}
+      <p className="small me-links">
+        <a href={href.about()}>關於與說明</a>
+      </p>
+    </>
+  )
+}
+
+function SignedIn({ data, uid, email }: { data: LoadedData; uid: string; email: string }) {
+  const personal = usePersonal()
+  const cloud = useCloud()
+  const [tab, setTab] = useState<Tab>('ticks')
 
   const lookup = (id: string) => data.routeById.get(id)
   const sentRoutes = new Set(personal.ticks.filter((t) => isSent(t.style)).map((t) => t.routeId))
@@ -33,31 +54,22 @@ export function MePage({ data }: { data: LoadedData }) {
     .filter((r) => r?.gradeValue !== undefined)
     .sort((a, b) => b!.gradeValue! - a!.gradeValue!)[0]
 
-  const exportJson = async () => {
-    const backup = await exportAll()
-    downloadFile(`longdong-backup-${today()}.json`, JSON.stringify(backup, null, 1), 'application/json')
-  }
-  const exportCsv = () =>
-    downloadFile(`longdong-ticks-${today()}.csv`, ticksToCsv(personal.ticks, lookup), 'text/csv;charset=utf-8')
-
-  const onImport = async (file: File | undefined) => {
-    if (!file) return
-    try {
-      const result = await importAll(parseExport(JSON.parse(await file.text())))
-      setMessage(`已匯入：收藏 ${result.favorites} 筆、攀登紀錄 ${result.ticks} 筆有更新`)
-    } catch (err) {
-      setMessage(err instanceof SyntaxError ? '這不是有效的備份檔（無法讀取 JSON）' : (err as Error).message)
-    } finally {
-      if (fileInput.current) fileInput.current.value = ''
-    }
-  }
-
   return (
     <>
-      <nav className="crumbs">
-        <a href={href.home()}>龍洞</a>
-      </nav>
-      <h1>我的紀錄</h1>
+      <section className="profile">
+        <NameEditor uid={uid} />
+        <p className="muted small">
+          {email} ·{' '}
+          {cloud.syncing
+            ? '同步中…'
+            : !cloud.connected
+              ? '離線中，恢復連線後自動同步'
+              : cloud.lastSync
+                ? `已同步（${relativeTime(cloud.lastSync)}）`
+                : '已連線'}
+        </p>
+        {cloud.error && <p className="small error">{cloud.error}</p>}
+      </section>
 
       <div className="stats">
         <div>
@@ -139,78 +151,65 @@ export function MePage({ data }: { data: LoadedData }) {
           </ul>
         ))}
 
-      <SyncPanel />
-
-      <section className="backup">
-        <h2>備份</h2>
-        <p className="muted small">
-          沒有登入時，收藏和攀登紀錄只存在這支手機的瀏覽器裡。清除瀏覽器資料或換手機前，請先登入同步或匯出備份；
-          iPhone 請先「加入主畫面」，資料才不會被系統清掉。
-        </p>
-        <div className="actions">
-          <button className="action" onClick={exportJson}>
-            匯出備份
-          </button>
-          <button className="action" onClick={() => fileInput.current?.click()}>
-            匯入備份
-          </button>
-          <button className="action" onClick={exportCsv} disabled={personal.ticks.length === 0}>
-            匯出 CSV
-          </button>
-          <input
-            ref={fileInput}
-            type="file"
-            accept="application/json,.json"
-            hidden
-            onChange={(e) => void onImport(e.target.files?.[0])}
-          />
-        </div>
-        {message && <p className="small">{message}</p>}
-      </section>
+      <div className="actions signout">
+        <button
+          className="action"
+          onClick={() => confirm('登出？這台裝置上的紀錄會清除，下次登入會從雲端載入。') && void signOut()}
+        >
+          登出
+        </button>
+      </div>
     </>
   )
 }
 
-function SyncPanel() {
-  const cloud = useCloud()
+function NameEditor({ uid }: { uid: string }) {
+  const social = useSocial()
+  const name = displayName(social.profiles, uid)
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState('')
+  const [error, setError] = useState<string>()
+
+  if (!editing) {
+    return (
+      <p className="profile-name">
+        <strong>{name}</strong>{' '}
+        <button
+          className="link-button"
+          onClick={() => {
+            setValue(name)
+            setError(undefined)
+            setEditing(true)
+          }}
+        >
+          修改暱稱
+        </button>
+      </p>
+    )
+  }
+
   return (
-    <section className="sync">
-      <h2>同步</h2>
-      {cloud.status === 'signed-in' && cloud.user ? (
-        <>
-          <p>
-            <strong>{cloud.user.name || cloud.user.email}</strong>
-            {cloud.user.name && <span className="muted small"> {cloud.user.email}</span>}
-          </p>
-          <p className="muted small">
-            {cloud.syncing
-              ? '同步中…'
-              : !cloud.connected
-                ? '目前離線，紀錄會先存在這台裝置，恢復連線後自動同步'
-                : cloud.lastSync
-                  ? `已同步（${relativeTime(cloud.lastSync)}）`
-                  : '已連線'}
-          </p>
-          <div className="actions">
-            <button className="action" onClick={() => void signOut()}>
-              登出
-            </button>
-          </div>
-          <p className="muted small">登出後，這台裝置上的紀錄會保留，但不再同步。</p>
-        </>
-      ) : (
-        <>
-          <p className="muted small">
-            用 Google 帳號登入後，收藏和攀登紀錄會自動同步到你的其他手機和電腦。沒有網路時照樣可以記錄，連線後自動同步。
-          </p>
-          <div className="actions">
-            <button className="action primary" onClick={() => void signIn()} disabled={cloud.status === 'loading'}>
-              {cloud.status === 'loading' ? '載入中…' : '用 Google 登入'}
-            </button>
-          </div>
-        </>
-      )}
-      {cloud.error && <p className="small error">{cloud.error}</p>}
-    </section>
+    <form
+      className="name-form"
+      onSubmit={async (e) => {
+        e.preventDefault()
+        try {
+          await rename(value)
+          setEditing(false)
+        } catch (err) {
+          setError((err as Error).message)
+        }
+      }}
+    >
+      <input value={value} maxLength={NAME_MAX} onChange={(e) => setValue(e.target.value)} aria-label="暱稱" autoFocus />
+      <button type="submit" className="action primary">
+        儲存
+      </button>
+      <button type="button" className="action" onClick={() => setEditing(false)}>
+        取消
+      </button>
+      <p className="muted small">留言和評分會顯示這個暱稱。</p>
+      {error && <p className="small error">{error}</p>}
+    </form>
   )
 }

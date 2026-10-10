@@ -111,20 +111,16 @@ export async function deleteTick(id: string): Promise<void> {
   notify({ tick: deleted })
 }
 
-/* ---------- 備份 ---------- */
+/* ---------- 整批讀寫（雲端同步用） ---------- */
 
 export async function exportAll(): Promise<PersonalExport> {
   const d = await db()
   const [favorites, ticks] = await Promise.all([d.getAll('favorites'), d.getAll('ticks')])
-  // 刪除標記也一起匯出，匯入另一台裝置時才不會把刪掉的紀錄救回來
+  // 刪除標記也一起帶上，同步到其他裝置時才不會把刪掉的紀錄救回來
   return { format: 'longdong-personal', version: 1, exportedAt: now(), favorites, ticks }
 }
 
-export async function importAll(data: PersonalExport): Promise<{ favorites: number; ticks: number }> {
-  return applyRecords(data.favorites, data.ticks)
-}
-
-/** 依「較新者為準」寫入一批紀錄（匯入備份、雲端同步共用），回傳實際更新的筆數 */
+/** 依「較新者為準」寫入一批紀錄（雲端同步用），回傳實際更新的筆數 */
 export async function applyRecords(favoritesIn: Favorite[], ticksIn: Tick[]): Promise<{ favorites: number; ticks: number }> {
   const d = await db()
   const [favorites, ticks] = await Promise.all([d.getAll('favorites'), d.getAll('ticks')])

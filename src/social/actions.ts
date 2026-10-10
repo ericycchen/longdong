@@ -1,0 +1,40 @@
+import { withCloud } from '../personal/sync'
+import { COMMENT_MAX, NAME_MAX, type Feel, type Rating } from './model'
+import { loadComments, setLocalProfile, setLocalRating } from './store'
+
+/** 評分；rating 為 null 時刪除自己的評分 */
+export async function rate(routeId: string, input: { stars: number; feel?: Feel } | null): Promise<void> {
+  const { m, uid } = await withCloud()
+  const rating: Rating | null = input ? { ...input, updatedAt: new Date().toISOString() } : null
+  await m.saveRating(uid, routeId, rating)
+  setLocalRating(uid, routeId, rating)
+}
+
+export async function postComment(routeId: string, text: string): Promise<void> {
+  const body = text.trim()
+  if (!body) return
+  if (body.length > COMMENT_MAX) throw new Error(`留言最多 ${COMMENT_MAX} 字`)
+  const { m, uid } = await withCloud()
+  await m.addComment(uid, routeId, body)
+  await loadComments(routeId)
+}
+
+export async function removeComment(routeId: string, id: string): Promise<void> {
+  const { m } = await withCloud()
+  await m.deleteComment(routeId, id)
+  await loadComments(routeId)
+}
+
+export async function report(routeId: string, id: string, reason: string): Promise<void> {
+  const { m, uid } = await withCloud()
+  await m.reportComment(uid, routeId, id, reason.trim())
+}
+
+export async function rename(name: string): Promise<void> {
+  const value = name.trim()
+  if (!value) throw new Error('暱稱不能空白')
+  if (value.length > NAME_MAX) throw new Error(`暱稱最多 ${NAME_MAX} 字`)
+  const { m, uid } = await withCloud()
+  await m.saveProfile(uid, value)
+  setLocalProfile(uid, { name: value, updatedAt: new Date().toISOString() })
+}

@@ -2,6 +2,54 @@
   "rules": {
 
     "v2": {
+      "profiles": {
+        ".read": true,
+        "$uid": {
+          ".write": "auth != null && auth.uid === $uid",
+          ".validate": "newData.hasChildren(['name', 'updatedAt'])",
+          "name": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 30" },
+          "updatedAt": { ".validate": "newData.isString()" },
+          "$other": { ".validate": false }
+        }
+      },
+      "ratings": {
+        ".read": true,
+        "$route": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && $route.length <= 100",
+            ".validate": "newData.hasChildren(['stars', 'updatedAt'])",
+            "stars": { ".validate": "newData.val() === 1 || newData.val() === 2 || newData.val() === 3 || newData.val() === 4 || newData.val() === 5" },
+            "feel": { ".validate": "newData.isString() && newData.val().matches(/^(soft|fair|hard)$/)" },
+            "updatedAt": { ".validate": "newData.isString()" },
+            "$other": { ".validate": false }
+          }
+        }
+      },
+      "comments": {
+        ".read": true,
+        "$route": {
+          "$id": {
+            ".write": "auth != null && $route.length <= 100 && ((!data.exists() && newData.child('uid').val() === auth.uid) || (data.exists() && !newData.exists() && data.child('uid').val() === auth.uid))",
+            ".validate": "newData.hasChildren(['uid', 'text', 'createdAt'])",
+            "uid": { ".validate": "newData.isString()" },
+            "text": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 1000" },
+            "createdAt": { ".validate": "newData.val() === now || (data.exists() && newData.val() === data.val())" },
+            "hidden": { ".validate": "newData.isBoolean()" },
+            "$other": { ".validate": false }
+          }
+        }
+      },
+      "reports": {
+        "$id": {
+          ".write": "auth != null && !data.exists()",
+          ".validate": "newData.hasChildren(['path', 'uid', 'createdAt']) && newData.child('uid').val() === auth.uid",
+          "path": { ".validate": "newData.isString() && newData.val().length <= 200" },
+          "uid": { ".validate": "newData.isString()" },
+          "reason": { ".validate": "newData.isString() && newData.val().length <= 500" },
+          "createdAt": { ".validate": "newData.val() === now" },
+          "$other": { ".validate": false }
+        }
+      },
       "personal": {
         "$uid": {
           ".read": "auth != null && auth.uid === $uid",

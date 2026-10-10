@@ -15,7 +15,8 @@ import {
   signOut,
   type User,
 } from 'firebase/auth'
-import { getDatabase, onValue, ref, update, type Unsubscribe } from 'firebase/database'
+import { get, getDatabase, onValue, push, ref, remove, serverTimestamp, set, update, type Unsubscribe } from 'firebase/database'
+import { routeKey, type Feel } from '../social/model'
 
 const app = initializeApp({
   // 前端用的公開設定（不是密鑰）；存取權限由 Realtime Database 規則控管
@@ -67,4 +68,42 @@ export function writeRemote(paths: Record<string, unknown>): Promise<void> {
 /** 連線狀態（Realtime Database 內建的 .info/connected） */
 export function watchConnected(callback: (connected: boolean) => void): Unsubscribe {
   return onValue(ref(db, '.info/connected'), (snap) => callback(snap.val() === true))
+}
+
+/* ---------- 社群：評分、留言、暱稱（讀取走 REST，見 social/store.ts） ---------- */
+
+/** 第一次登入時建立暱稱（預設 Google 名稱），已有就不動。回傳目前的暱稱 */
+export async function ensureProfile(uid: string, fallbackName: string): Promise<{ name: string; updatedAt: string }> {
+  const r = ref(db, `v2/profiles/${uid}`)
+  const snap = await get(r)
+  if (snap.exists()) return snap.val()
+  const profile = { name: (fallbackName || '岩友').slice(0, 30), updatedAt: new Date().toISOString() }
+  await set(r, profile)
+  return profile
+}
+
+export function saveProfile(uid: string, name: string): Promise<void> {
+  return set(ref(db, `v2/profiles/${uid}`), { name, updatedAt: new Date().toISOString() })
+}
+
+export function saveRating(uid: string, routeId: string, rating: { stars: number; feel?: Feel; updatedAt: string } | null): Promise<void> {
+  const r = ref(db, `v2/ratings/${routeKey(routeId)}/${uid}`)
+  return rating ? set(r, JSON.parse(JSON.stringify(rating))) : remove(r)
+}
+
+export async function addComment(uid: string, routeId: string, text: string): Promise<void> {
+  await push(ref(db, `v2/comments/${routeKey(routeId)}`), { uid, text, createdAt: serverTimestamp() })
+}
+
+export function deleteComment(routeId: string, id: string): Promise<void> {
+  return remove(ref(db, `v2/comments/${routeKey(routeId)}/${id}`))
+}
+
+export async function reportComment(uid: string, routeId: string, id: string, reason: string): Promise<void> {
+  await push(ref(db, 'v2/reports'), {
+    path: `v2/comments/${routeKey(routeId)}/${id}`,
+    uid,
+    ...(reason ? { reason: reason.slice(0, 500) } : {}),
+    createdAt: serverTimestamp(),
+  })
 }

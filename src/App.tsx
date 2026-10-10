@@ -1,4 +1,6 @@
+import { useEffect } from 'react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
+import { BottomNav } from './components/BottomNav'
 import { useData } from './data/dataset'
 import { relativeTime } from './format'
 import { AboutPage } from './pages/AboutPage'
@@ -6,6 +8,8 @@ import { AreaPage } from './pages/AreaPage'
 import { HomePage } from './pages/HomePage'
 import { MePage } from './pages/MePage'
 import { RoutePage } from './pages/RoutePage'
+import { SearchPage } from './pages/SearchPage'
+import { loadRatings } from './social/store'
 import { href, usePage } from './router'
 
 export function App() {
@@ -16,6 +20,11 @@ export function App() {
     needRefresh: [needRefresh],
     updateServiceWorker,
   } = useRegisterSW()
+
+  // 評分（路線清單顯示平均星等）在背景載入；離線時用 Service Worker 快取的上一份
+  useEffect(() => {
+    void loadRatings()
+  }, [])
 
   return (
     <>
@@ -45,6 +54,8 @@ export function App() {
             <AreaPage key={page.id} data={state.data} id={page.id} />
           ) : page.name === 'route' ? (
             <RoutePage data={state.data} id={page.id} />
+          ) : page.name === 'search' ? (
+            <SearchPage data={state.data} />
           ) : page.name === 'me' ? (
             <MePage data={state.data} />
           ) : page.name === 'about' ? (
@@ -54,7 +65,7 @@ export function App() {
           ))}
       </main>
 
-      {state.status === 'ready' && (
+      {state.status === 'ready' && page.name === 'home' && (
         <footer className="footer muted small">
           資料更新於 {relativeTime(state.data.dataset.updatedAt)}
           {offlineReady || navigator.serviceWorker?.controller ? ' · 已可離線使用' : ''}
@@ -64,11 +75,11 @@ export function App() {
             {state.data.dataset.source.attribution}
           </a>
           <br />
-          僅供參考，攀登前請自行確認現場狀況
-          <br />
-          <a href={href.me()}>我的紀錄</a> · <a href={href.about()}>關於與說明</a>
+          僅供參考，攀登前請自行確認現場狀況 · <a href={href.about()}>關於與說明</a>
         </footer>
       )}
+
+      <BottomNav page={page} />
     </>
   )
 }

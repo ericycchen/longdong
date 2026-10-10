@@ -1,7 +1,13 @@
 import type { LoadedData } from '../data/dataset'
 import type { Bolt } from '../data/schema'
+import { CommentsSection } from '../components/CommentsSection'
 import { PersonalPanel } from '../components/PersonalPanel'
+import { RatingSection } from '../components/RatingSection'
 import { SafetyLight } from '../components/SafetyLight'
+import { StarsBadge } from '../components/Stars'
+import { useCloud } from '../personal/sync'
+import { FEEL_LABEL, feelConsensus, routeKey, summarize } from '../social/model'
+import { useSocial } from '../social/store'
 import { StatusBadge } from '../components/StatusBadge'
 import { formatDate, typeText, yearsSince } from '../format'
 import { href } from '../router'
@@ -9,6 +15,8 @@ import { NotFound } from './AreaPage'
 
 export function RoutePage({ data, id }: { data: LoadedData; id: string }) {
   const ref = data.routeById.get(id)
+  const signedIn = useCloud().status === 'signed-in'
+  const rating = summarize(useSocial().ratings[routeKey(id)])
   if (!ref) return <NotFound />
   const { route, sector, area } = ref
   const danger = route.status === 'closed' || route.status === 'to-remove'
@@ -34,17 +42,27 @@ export function RoutePage({ data, id }: { data: LoadedData; id: string }) {
         {!route.isFixture && (
           <div className="safety-row">
             <SafetyLight safety={route.safety} />
+            {rating && (
+              <button
+                type="button"
+                className="rating-link"
+                onClick={() => document.getElementById('rating')?.scrollIntoView({ behavior: 'smooth' })}
+              >
+                <StarsBadge summary={rating} />
+                {feelConsensus(rating) && <span className="muted small"> · 體感{FEEL_LABEL[feelConsensus(rating)!]}</span>}
+              </button>
+            )}
           </div>
         )}
       </header>
-
-      {!route.isFixture && <PersonalPanel route={route} />}
 
       {danger && (
         <p className="alert" role="alert">
           此路線標示為「{route.statusLabel}」，請勿攀登。
         </p>
       )}
+
+      {!route.isFixture && signedIn && <PersonalPanel route={route} />}
 
       <section className="panel">
         <dl className="kv">
@@ -136,6 +154,14 @@ export function RoutePage({ data, id }: { data: LoadedData; id: string }) {
           <p className="pre small">{route.notes}</p>
         </section>
       )}
+
+      {!route.isFixture && (
+        <div id="rating">
+          <RatingSection routeId={route.id} />
+        </div>
+      )}
+
+      <CommentsSection routeId={route.id} />
     </article>
   )
 }
