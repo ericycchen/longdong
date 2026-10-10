@@ -5,6 +5,8 @@ import { formatDate } from '../format'
 import { downloadFile, ticksToCsv } from '../personal/files'
 import { TICK_STYLE_LABEL, isSent, parseExport, today } from '../personal/model'
 import { exportAll, importAll, usePersonal } from '../personal/store'
+import { signIn, signOut, useCloud } from '../personal/sync'
+import { relativeTime } from '../format'
 import { href } from '../router'
 
 type Tab = 'ticks' | 'favorites'
@@ -127,10 +129,12 @@ export function MePage({ data }: { data: LoadedData }) {
           </ul>
         ))}
 
+      <SyncPanel />
+
       <section className="backup">
         <h2>備份</h2>
         <p className="muted small">
-          收藏和攀登紀錄只存在這支手機的瀏覽器裡，不會上傳。清除瀏覽器資料或換手機前，請先匯出備份；
+          沒有登入時，收藏和攀登紀錄只存在這支手機的瀏覽器裡。清除瀏覽器資料或換手機前，請先登入同步或匯出備份；
           iPhone 請先「加入主畫面」，資料才不會被系統清掉。
         </p>
         <div className="actions">
@@ -154,5 +158,49 @@ export function MePage({ data }: { data: LoadedData }) {
         {message && <p className="small">{message}</p>}
       </section>
     </>
+  )
+}
+
+function SyncPanel() {
+  const cloud = useCloud()
+  return (
+    <section className="sync">
+      <h2>同步</h2>
+      {cloud.status === 'signed-in' && cloud.user ? (
+        <>
+          <p>
+            <strong>{cloud.user.name || cloud.user.email}</strong>
+            {cloud.user.name && <span className="muted small"> {cloud.user.email}</span>}
+          </p>
+          <p className="muted small">
+            {cloud.syncing
+              ? '同步中…'
+              : !cloud.connected
+                ? '目前離線，紀錄會先存在這台裝置，恢復連線後自動同步'
+                : cloud.lastSync
+                  ? `已同步（${relativeTime(cloud.lastSync)}）`
+                  : '已連線'}
+          </p>
+          <div className="actions">
+            <button className="action" onClick={() => void signOut()}>
+              登出
+            </button>
+          </div>
+          <p className="muted small">登出後，這台裝置上的紀錄會保留，但不再同步。</p>
+        </>
+      ) : (
+        <>
+          <p className="muted small">
+            用 Google 帳號登入後，收藏和攀登紀錄會自動同步到你的其他手機和電腦。沒有網路時照樣可以記錄，連線後自動同步。
+          </p>
+          <div className="actions">
+            <button className="action primary" onClick={() => void signIn()} disabled={cloud.status === 'loading'}>
+              {cloud.status === 'loading' ? '載入中…' : '用 Google 登入'}
+            </button>
+          </div>
+        </>
+      )}
+      {cloud.error && <p className="small error">{cloud.error}</p>}
+    </section>
   )
 }

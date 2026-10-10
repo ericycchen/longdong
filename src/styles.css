@@ -728,3 +728,15 @@ main {
 .backup {
   margin-top: 24px;
 }
+
+.sync {
+  margin-top: 24px;
+}
+
+.sync p {
+  margin: 4px 0 8px;
+}
+
+.error {
+  color: var(--danger);
+}

@@ -71,12 +71,25 @@ export function usePersonal(): PersonalState {
 
 const now = () => new Date().toISOString()
 
+/** 本機寫入後通知（雲端同步用） */
+type LocalWrite = { favorite: Favorite } | { tick: Tick }
+const writeListeners = new Set<(w: LocalWrite) => void>()
+export function onLocalWrite(listener: (w: LocalWrite) => void): () => void {
+  writeListeners.add(listener)
+  return () => writeListeners.delete(listener)
+}
+function notify(w: LocalWrite) {
+  for (const l of writeListeners) l(w)
+}
+
 export async function setFavorite(routeId: string, on: boolean): Promise<void> {
   const d = await db()
   const existing = await d.get('favorites', routeId)
   const t = now()
-  await d.put('favorites', { routeId, createdAt: existing?.createdAt ?? t, updatedAt: t, deleted: !on })
+  const favorite: Favorite = { routeId, createdAt: existing?.createdAt ?? t, updatedAt: t, deleted: !on }
+  await d.put('favorites', favorite)
   await refresh()
+  notify({ favorite })
 }
 
 export async function addTick(input: Pick<Tick, 'routeId' | 'date' | 'style' | 'note'>): Promise<void> {
@@ -85,14 +98,17 @@ export async function addTick(input: Pick<Tick, 'routeId' | 'date' | 'style' | '
   if (!tick.note) delete tick.note
   await (await db()).put('ticks', tick)
   await refresh()
+  notify({ tick })
 }
 
 export async function deleteTick(id: string): Promise<void> {
   const d = await db()
   const tick = await d.get('ticks', id)
   if (!tick) return
-  await d.put('ticks', { ...tick, deleted: true, updatedAt: now() })
+  const deleted: Tick = { ...tick, deleted: true, updatedAt: now() }
+  await d.put('ticks', deleted)
   await refresh()
+  notify({ tick: deleted })
 }
 
 /* ---------- 備份 ---------- */
@@ -105,10 +121,16 @@ export async function exportAll(): Promise<PersonalExport> {
 }
 
 export async function importAll(data: PersonalExport): Promise<{ favorites: number; ticks: number }> {
+  return applyRecords(data.favorites, data.ticks)
+}
+
+/** 依「較新者為準」寫入一批紀錄（匯入備份、雲端同步共用），回傳實際更新的筆數 */
+export async function applyRecords(favoritesIn: Favorite[], ticksIn: Tick[]): Promise<{ favorites: number; ticks: number }> {
   const d = await db()
   const [favorites, ticks] = await Promise.all([d.getAll('favorites'), d.getAll('ticks')])
-  const fav = mergeRecords(favorites, data.favorites, (f) => f.routeId).changed
-  const tk = mergeRecords(ticks, data.ticks, (t) => t.id).changed
+  const fav = mergeRecords(favorites, favoritesIn, (f) => f.routeId).changed
+  const tk = mergeRecords(ticks, ticksIn, (t) => t.id).changed
+  if (fav.length === 0 && tk.length === 0) return { favorites: 0, ticks: 0 }
   const tx = d.transaction(['favorites', 'ticks'], 'readwrite')
   await Promise.all([
     ...fav.map((f) => tx.objectStore('favorites').put(f)),
@@ -117,4 +139,12 @@ export async function importAll(data: PersonalExport): Promise<{ favorites: numb
   ])
   await refresh()
   return { favorites: fav.length, ticks: tk.length }
+}
+
+/** 清空本機的收藏與紀錄（切換成另一個帳號、且使用者選擇不合併時） */
+export async function clearAll(): Promise<void> {
+  const d = await db()
+  const tx = d.transaction(['favorites', 'ticks'], 'readwrite')
+  await Promise.all([tx.objectStore('favorites').clear(), tx.objectStore('ticks').clear(), tx.done])
+  await refresh()
 }
