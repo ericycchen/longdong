@@ -6,7 +6,7 @@ import { formatDate, relativeTime } from '../format'
 import { TICK_STYLE_LABEL, isSent } from '../personal/model'
 import { deleteTick, setFavorite, usePersonal } from '../personal/store'
 import { signOut, useCloud } from '../personal/sync'
-import { rename } from '../social/actions'
+import { deleteMyAccount, rename } from '../social/actions'
 import { NAME_MAX } from '../social/model'
 import { displayName, useSocial } from '../social/store'
 import { href } from '../router'
@@ -32,7 +32,7 @@ export function MePage({ data }: { data: LoadedData }) {
             <li>替路線評分、留言分享 beta 與現場狀況</li>
             <li>在手機和電腦之間自動同步，沒網路時也能記錄</li>
           </ul>
-          <SignInPrompt message="用 Google 帳號登入，Email 不會公開。" />
+          <SignInPrompt message="用 Google 或 Facebook 帳號登入，Email 不會公開。" />
         </section>
       )}
       <p className="small me-links">
@@ -159,7 +159,41 @@ function SignedIn({ data, uid, email }: { data: LoadedData; uid: string; email: 
           登出
         </button>
       </div>
+
+      <DeleteAccount />
     </>
+  )
+}
+
+function DeleteAccount() {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string>()
+  const run = async () => {
+    if (!navigator.onLine) {
+      setError('需要網路才能刪除帳號')
+      return
+    }
+    if (!confirm('確定要刪除帳號？\n你的攀登紀錄、收藏、評分、留言和暱稱都會永久刪除，無法復原。')) return
+    setBusy(true)
+    setError(undefined)
+    try {
+      await deleteMyAccount()
+      alert('帳號和資料已刪除。')
+    } catch (err) {
+      setError(`刪除失敗（${(err as { code?: string }).code ?? (err as Error).message}）`)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <details className="danger-zone">
+      <summary>刪除帳號</summary>
+      <p className="muted small">永久刪除你的攀登紀錄、收藏、評分、留言和暱稱，以及登入帳號。</p>
+      <button className="action danger" onClick={() => void run()} disabled={busy}>
+        {busy ? '刪除中…' : '刪除我的帳號與所有資料'}
+      </button>
+      {error && <p className="small error">{error}</p>}
+    </details>
   )
 }
 

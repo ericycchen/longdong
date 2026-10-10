@@ -6,13 +6,19 @@
  */
 import { initializeApp } from 'firebase/app'
 import {
+  FacebookAuthProvider,
   GoogleAuthProvider,
+  deleteUser,
   getAuth,
   getRedirectResult,
+  linkWithCredential,
   onAuthStateChanged,
+  reauthenticateWithPopup,
   signInWithPopup,
   signInWithRedirect,
   signOut,
+  type AuthCredential,
+  type AuthProvider,
   type User,
 } from 'firebase/auth'
 import { get, getDatabase, onValue, push, ref, remove, serverTimestamp, set, update, type Unsubscribe } from 'firebase/database'
@@ -37,16 +43,51 @@ export function watchUser(callback: (user: User | null) => void): Unsubscribe {
   return onAuthStateChanged(auth, callback)
 }
 
-export async function signInWithGoogle(): Promise<void> {
-  const provider = new GoogleAuthProvider()
-  provider.setCustomParameters({ prompt: 'select_account' })
+export type ProviderName = 'google' | 'facebook'
+
+export const PROVIDER_LABEL: Record<ProviderName, string> = { google: 'Google', facebook: 'Facebook' }
+
+function makeProvider(name: ProviderName): AuthProvider {
+  if (name === 'facebook') {
+    const p = new FacebookAuthProvider()
+    p.addScope('email')
+    return p
+  }
+  const p = new GoogleAuthProvider()
+  p.setCustomParameters({ prompt: 'select_account' })
+  return p
+}
+
+function credentialFromError(name: ProviderName, err: unknown): AuthCredential | null {
+  const e = err as Parameters<typeof GoogleAuthProvider.credentialFromError>[0]
+  return name === 'facebook' ? FacebookAuthProvider.credentialFromError(e) : GoogleAuthProvider.credentialFromError(e)
+}
+
+/**
+ * 登入。同一個 Email 已經用另一種方式登入過時（專案設定為「同 Email 自動連結」），
+ * 先用原本的方式登入，再把這次的登入方式連結到同一個帳號。
+ * confirmLink 回傳 false 表示使用者取消。
+ */
+export async function signInWith(
+  name: ProviderName,
+  confirmLink: (email: string, existing: ProviderName) => boolean,
+): Promise<void> {
   try {
-    await signInWithPopup(auth, provider)
+    await signInWithPopup(auth, makeProvider(name))
   } catch (err) {
     const code = (err as { code?: string }).code
     // 彈出視窗被擋、或環境不支援（例如部分 iOS 主畫面 App）時改用整頁跳轉
     if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-environment') {
-      await signInWithRedirect(auth, provider)
+      await signInWithRedirect(auth, makeProvider(name))
+      return
+    }
+    if (code === 'auth/account-exists-with-different-credential') {
+      const pending = credentialFromError(name, err)
+      const email = (err as { customData?: { email?: string } }).customData?.email ?? ''
+      const existing: ProviderName = name === 'google' ? 'facebook' : 'google'
+      if (!pending || !confirmLink(email, existing)) return
+      const result = await signInWithPopup(auth, makeProvider(existing))
+      await linkWithCredential(result.user, pending)
       return
     }
     throw err
@@ -106,4 +147,22 @@ export async function reportComment(uid: string, routeId: string, id: string, re
     ...(reason ? { reason: reason.slice(0, 500) } : {}),
     createdAt: serverTimestamp(),
   })
+}
+
+/**
+ * 刪除帳號：先刪除資料庫中屬於這個使用者的資料（paths 由呼叫端整理，值為 null），再刪除登入帳號。
+ * 太久沒登入時 Firebase 會要求重新驗證，自動跳出登入視窗。
+ */
+export async function deleteAccount(paths: Record<string, null>): Promise<void> {
+  const user = auth.currentUser
+  if (!user) throw new Error('請先登入')
+  await update(ref(db), paths)
+  try {
+    await deleteUser(user)
+  } catch (err) {
+    if ((err as { code?: string }).code !== 'auth/requires-recent-login') throw err
+    const providerId = user.providerData[0]?.providerId
+    await reauthenticateWithPopup(user, makeProvider(providerId === 'facebook.com' ? 'facebook' : 'google'))
+    await deleteUser(user)
+  }
 }

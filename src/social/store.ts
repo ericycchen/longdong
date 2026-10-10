@@ -34,7 +34,7 @@ export function useSocial(): SocialState {
   )
 }
 
-async function get<T>(path: string): Promise<T | null> {
+export async function get<T>(path: string): Promise<T | null> {
   const res = await fetch(`${DB_URL}/${path}.json`)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return (await res.json()) as T | null

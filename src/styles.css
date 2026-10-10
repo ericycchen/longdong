@@ -1030,3 +1030,24 @@ main {
   font-size: inherit;
   color: var(--primary);
 }
+
+.action.facebook {
+  background: #1877f2;
+  border-color: #1877f2;
+  color: #fff;
+}
+
+.danger-zone {
+  margin-top: 32px;
+  font-size: 0.9rem;
+}
+
+.danger-zone summary {
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.action.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}

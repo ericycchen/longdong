@@ -82,12 +82,20 @@ export function startCloud(): void {
   onLocalWrite((w) => void push(w))
 }
 
-export async function signIn(): Promise<void> {
+export type ProviderName = 'google' | 'facebook'
+const PROVIDER_LABEL: Record<ProviderName, string> = { google: 'Google', facebook: 'Facebook' }
+
+export async function signIn(provider: ProviderName = 'google'): Promise<void> {
   set({ error: undefined })
   try {
     const m = await load()
     storage.set(ENABLED_KEY, '1')
-    await m.signInWithGoogle()
+    await m.signInWith(provider, (email, existing) =>
+      confirm(
+        `${email || '這個 Email'} 已經用 ${PROVIDER_LABEL[existing]} 登入過。\n` +
+          `接下來請用 ${PROVIDER_LABEL[existing]} 登入一次，之後 ${PROVIDER_LABEL[provider]} 和 ${PROVIDER_LABEL[existing]} 都能登入同一個帳號。`,
+      ),
+    )
   } catch (err) {
     const code = (err as { code?: string }).code
     if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return
@@ -101,9 +109,22 @@ export async function signOut(): Promise<void> {
   stopRemote?.()
   stopRemote = undefined
   await m.signOutUser()
+  await forgetDevice()
+}
+
+async function forgetDevice(): Promise<void> {
   storage.set(ENABLED_KEY, null)
   storage.set(LAST_UID_KEY, null)
   await clearAll()
+}
+
+/** 刪除帳號與雲端上的所有資料（paths 由 social/actions 整理），並清除這台裝置上的副本 */
+export async function deleteAccount(paths: Record<string, null>): Promise<void> {
+  const { m } = await withCloud()
+  stopRemote?.()
+  stopRemote = undefined
+  await m.deleteAccount(paths)
+  await forgetDevice()
 }
 
 /** 已登入時回傳 Firebase 模組與 uid，給評分、留言等寫入功能使用 */

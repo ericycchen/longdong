@@ -25,8 +25,9 @@ export function AboutPage({ data }: { data: LoadedData }) {
 
       <h2>帳號與隱私</h2>
       <p>
-        登入使用 Google 帳號。收藏和攀登紀錄只有你自己看得到；評分和留言會公開，顯示你設定的暱稱，Email 不會公開。
+        登入使用 Google 或 Facebook 帳號。收藏和攀登紀錄只有你自己看得到；評分和留言會公開，顯示你設定的暱稱，Email 不會公開。
         資料存放在臺灣戶外攀岩協會的 Firebase 專案。不當留言可以按「檢舉」，由管理員處理。
+        詳見<a href="./privacy.html">隱私權政策</a>；要刪除帳號與所有資料，請到「我的」頁最下方。
       </p>
 
       <h2>資料來源</h2>

@@ -1,6 +1,6 @@
-import { withCloud } from '../personal/sync'
-import { COMMENT_MAX, NAME_MAX, type Feel, type Rating } from './model'
-import { loadComments, setLocalProfile, setLocalRating } from './store'
+import { deleteAccount, withCloud } from '../personal/sync'
+import { COMMENT_MAX, NAME_MAX, type Comment, type Feel, type Rating } from './model'
+import { get, loadComments, loadRatings, setLocalProfile, setLocalRating } from './store'
 
 /** 評分；rating 為 null 時刪除自己的評分 */
 export async function rate(routeId: string, input: { stars: number; feel?: Feel } | null): Promise<void> {
@@ -37,4 +37,28 @@ export async function rename(name: string): Promise<void> {
   const { m, uid } = await withCloud()
   await m.saveProfile(uid, value)
   setLocalProfile(uid, { name: value, updatedAt: new Date().toISOString() })
+}
+
+/**
+ * 刪除我的帳號：個人紀錄、暱稱、所有評分與留言，最後刪除登入帳號。
+ * 以最新的雲端資料找出屬於自己的評分與留言，一次刪除。
+ */
+export async function deleteMyAccount(): Promise<void> {
+  const { uid } = await withCloud()
+  const [ratings, comments] = await Promise.all([
+    get<Record<string, Record<string, Rating>>>('v2/ratings'),
+    get<Record<string, Record<string, Omit<Comment, 'id'>>>>('v2/comments'),
+  ])
+  const paths: Record<string, null> = {
+    [`v2/personal/${uid}`]: null,
+    [`v2/profiles/${uid}`]: null,
+  }
+  for (const [route, byUser] of Object.entries(ratings ?? {})) {
+    if (byUser[uid]) paths[`v2/ratings/${route}/${uid}`] = null
+  }
+  for (const [route, list] of Object.entries(comments ?? {})) {
+    for (const [id, c] of Object.entries(list)) if (c.uid === uid) paths[`v2/comments/${route}/${id}`] = null
+  }
+  await deleteAccount(paths)
+  await loadRatings(true)
 }

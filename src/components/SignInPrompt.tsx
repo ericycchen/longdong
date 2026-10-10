@@ -19,9 +19,20 @@ export function SignInPrompt({ message, compact = false }: { message: string; co
   return (
     <div className="signin-prompt">
       <p className="muted small">{message}</p>
-      <button className="action primary" onClick={() => void signIn()} disabled={cloud.status === 'loading' || offline}>
-        {cloud.status === 'loading' ? '載入中…' : offline ? '需要網路才能登入' : '用 Google 登入'}
-      </button>
+      {offline ? (
+        <button className="action" disabled>
+          需要網路才能登入
+        </button>
+      ) : (
+        <div className="actions">
+          <button className="action primary" onClick={() => void signIn('google')} disabled={cloud.status === 'loading'}>
+            用 Google 登入
+          </button>
+          <button className="action facebook" onClick={() => void signIn('facebook')} disabled={cloud.status === 'loading'}>
+            用 Facebook 登入
+          </button>
+        </div>
+      )}
       {cloud.error && <p className="small error">{cloud.error}</p>}
     </div>
   )
