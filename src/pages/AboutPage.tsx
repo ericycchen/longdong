@@ -1,4 +1,6 @@
 import type { LoadedData } from '../data/dataset'
+import { SAFETY_LABEL, SafetyLight } from '../components/SafetyLight'
+import type { Safety } from '../data/schema'
 import { formatDate } from '../format'
 import { href } from '../router'
 
@@ -23,11 +25,15 @@ export function AboutPage({ data }: { data: LoadedData }) {
 
       <h2>資料來源</h2>
       <p>
-        路線與 Bolt 資料由 <strong>Re-bolt 團隊</strong>維護於{' '}
+        路線與 Bolt 資料由{' '}
+        <a href={dataset.source.projectUrl} target="_blank" rel="noreferrer">
+          {dataset.source.attribution}
+        </a>{' '}
+        維護於{' '}
         <a href={dataset.source.url} target="_blank" rel="noreferrer">
           Google Sheet
         </a>
-        ，本站每日自動同步。發現資料有誤，請聯絡 Re-bolt 團隊更正。
+        ，本站每日自動同步。發現資料有誤，請聯絡協會更正。
       </p>
       <dl className="kv">
         <dt>資料更新</dt>
@@ -38,6 +44,24 @@ export function AboutPage({ data }: { data: LoadedData }) {
         <dd>{dataset.license}</dd>
         <dt>程式授權</dt>
         <dd>MIT</dd>
+      </dl>
+
+      <h2>安全評級</h2>
+      <dl className="kv legend">
+        {(['green', 'yellow', 'red'] as Safety[]).map((s) => (
+          <div key={s} className="kv-row">
+            <dt>
+              <SafetyLight safety={s} />
+            </dt>
+            <dd>{SAFETY_LABEL[s]}</dd>
+          </div>
+        ))}
+        <div className="kv-row">
+          <dt>
+            <SafetyLight />
+          </dt>
+          <dd>尚未評級</dd>
+        </div>
       </dl>
 
       <h2>材質代號</h2>

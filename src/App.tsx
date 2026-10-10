@@ -62,7 +62,12 @@ export function App() {
           資料更新於 {relativeTime(state.data.dataset.updatedAt)}
           {offlineReady || navigator.serviceWorker?.controller ? ' · 已可離線使用' : ''}
           <br />
-          資料來源：Re-bolt 團隊 · 僅供參考，攀登前請自行確認現場狀況
+          資料來源：
+          <a href={state.data.dataset.source.projectUrl} target="_blank" rel="noreferrer">
+            {state.data.dataset.source.attribution}
+          </a>
+          <br />
+          僅供參考，攀登前請自行確認現場狀況
         </footer>
       )}
     </>

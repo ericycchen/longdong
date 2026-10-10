@@ -33,7 +33,7 @@ export function RoutePage({ data, id }: { data: LoadedData; id: string }) {
         </div>
         {!route.isFixture && (
           <div className="safety-row">
-            <SafetyLight safety={route.safety} showLabel />
+            <SafetyLight safety={route.safety} />
           </div>
         )}
       </header>

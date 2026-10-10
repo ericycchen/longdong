@@ -101,7 +101,13 @@ export const Dataset = z.object({
   version: z.string(),
   /** 資料內容最後一次變動的時間（ISO 8601） */
   updatedAt: z.string(),
-  source: z.object({ sheetId: z.string(), url: z.string().url() }),
+  source: z.object({
+    sheetId: z.string(),
+    url: z.string().url(),
+    /** 資料維護單位，顯示於 App 與授權標示 */
+    attribution: z.string(),
+    projectUrl: z.string().url(),
+  }),
   license: z.string(),
   hardware: z.array(Hardware),
   areas: z.array(Area),

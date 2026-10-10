@@ -13,7 +13,7 @@ import { dirname, join, resolve } from 'node:path'
 import { Dataset, type Area } from '../src/data/schema'
 import { parseAreaSheet, parseHardwareSheet } from './lib/parse'
 import { htmlUrl, parseSafetyHtml } from './lib/safety'
-import { AREA_TABS, DATA_LICENSE, SHEET_ID, SHEET_URL, STATS_GID, csvUrl } from './sheet.config'
+import { AREA_TABS, DATA_ATTRIBUTION, DATA_LICENSE, PROJECT_URL, SHEET_ID, SHEET_URL, STATS_GID, csvUrl } from './sheet.config'
 
 const OUT = resolve(import.meta.dirname, '../public/data/longdong.json')
 
@@ -75,18 +75,22 @@ async function main() {
     }
   }
 
-  const content = { hardware, areas }
+  // version 涵蓋 version、updatedAt 以外的所有內容，metadata 變動也會重新輸出
+  const content = {
+    schemaVersion: 1 as const,
+    source: { sheetId: SHEET_ID, url: SHEET_URL, attribution: DATA_ATTRIBUTION, projectUrl: PROJECT_URL },
+    license: DATA_LICENSE,
+    hardware,
+    areas,
+  }
   const version = createHash('sha256').update(JSON.stringify(content)).digest('hex').slice(0, 12)
 
   const previous = existsSync(OUT) ? (JSON.parse(readFileSync(OUT, 'utf8')) as { version?: string; updatedAt?: string }) : undefined
   const changed = previous?.version !== version
 
   const dataset = Dataset.parse({
-    schemaVersion: 1,
     version,
     updatedAt: changed ? new Date().toISOString() : previous!.updatedAt,
-    source: { sheetId: SHEET_ID, url: SHEET_URL },
-    license: DATA_LICENSE,
     ...content,
   })
 

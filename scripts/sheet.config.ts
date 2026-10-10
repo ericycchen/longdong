@@ -1,5 +1,5 @@
 /**
- * Re-bolt 團隊維護的龍洞路線 Google Sheet。
+ * 臺灣戶外攀岩協會（TOCC）固定點更新計畫（Rebolting Project）維護的龍洞路線 Google Sheet。
  * 每個區域是一個分頁（gid）。新增或調整分頁時，更新這裡的對應表。
  */
 export const SHEET_ID = '1QHFNQSPgKgQrTNnYn246wfotOYqOkzHjLltZ26keBgg'
@@ -30,6 +30,10 @@ export const AREA_TABS: AreaTab[] = [
 export const STATS_GID = '2004465247'
 
 export const DATA_LICENSE = 'CC BY-SA 4.0'
+
+export const DATA_ATTRIBUTION = '臺灣戶外攀岩協會（TOCC）固定點更新計畫'
+
+export const PROJECT_URL = 'https://www.tocc-climbing.org/rebolting-project'
 
 export function csvUrl(gid: string): string {
   return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`
