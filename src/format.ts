@@ -1,4 +1,4 @@
-import type { RouteStatus, RouteType } from './data/schema'
+import type { Route, RouteStatus, RouteType } from './data/schema'
 
 export const TYPE_LABEL: Record<RouteType, string> = {
   sport: '運攀',
@@ -16,6 +16,26 @@ export const STATUS_INFO: Record<RouteStatus, { label: string; tone: 'ok' | 'war
   closed: { label: '路線封閉', tone: 'danger' },
   'to-remove': { label: '待移除', tone: 'danger' },
   unknown: { label: '待查', tone: 'muted' },
+}
+
+const NOT_A_BOLT = new Set(['無 Anchor', 'No Anchor', '天然固定點'])
+
+/**
+ * 運攀要帶的快扣數：每個 bolt 位置加上 anchor。
+ * 與其他路線「共用」的 bolt 也要扣，所以不用 Sheet 的「Bolt 統計」（它不算共用的）。
+ */
+export function quickdraws(route: Route): number | undefined {
+  if (route.type !== 'sport') return undefined
+  const n = route.bolts.length + route.anchors.filter((a) => !NOT_A_BOLT.has(a.material)).length
+  return n > 0 ? n : undefined
+}
+
+/** 路線種類的顯示文字，運攀前面加上快扣數，例如「18快扣 運攀」 */
+export function typeText(route: Route): string {
+  if (route.isFixture) return '固定點'
+  if (!route.type) return ''
+  const qd = quickdraws(route)
+  return qd ? `${qd}快扣 ${TYPE_LABEL[route.type]}` : TYPE_LABEL[route.type]
 }
 
 /** "2025-12-04" → "2025/12/04"；部分日期照樣顯示 */

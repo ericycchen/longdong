@@ -2,7 +2,7 @@ import type { LoadedData } from '../data/dataset'
 import type { Bolt } from '../data/schema'
 import { SafetyLight } from '../components/SafetyLight'
 import { StatusBadge } from '../components/StatusBadge'
-import { TYPE_LABEL, formatDate, yearsSince } from '../format'
+import { formatDate, typeText, yearsSince } from '../format'
 import { href } from '../router'
 import { NotFound } from './AreaPage'
 
@@ -27,8 +27,7 @@ export function RoutePage({ data, id }: { data: LoadedData; id: string }) {
         </h1>
         <div className="facts">
           {route.grade && <span className="grade big">{route.grade}</span>}
-          {route.type && <span>{TYPE_LABEL[route.type]}</span>}
-          {route.isFixture && <span>固定點</span>}
+          {(route.type || route.isFixture) && <span>{typeText(route)}</span>}
           {route.heightM && <span>{route.heightM} m</span>}
         </div>
         {!route.isFixture && (
