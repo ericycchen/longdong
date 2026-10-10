@@ -32,13 +32,10 @@ const ISLAND_OUTLINE = [
 const TARGET_HEIGHT = 330
 const CENTER = { x: 256, y: 192 }
 
-/** favicon 太小、字看不清楚，只放島（置中、放大） */
-function svg(maskable: boolean, withText = true): string {
-  const height = withText ? TARGET_HEIGHT : 470
-  const center = withText ? CENTER : { x: 256, y: 256 }
-  const scale = height / ISLAND.height
-  const x = center.x - (ISLAND.x + ISLAND.width / 2) * scale
-  const y = center.y - (ISLAND.y + ISLAND.height / 2) * scale
+function svg(maskable: boolean): string {
+  const scale = TARGET_HEIGHT / ISLAND.height
+  const x = CENTER.x - (ISLAND.x + ISLAND.width / 2) * scale
+  const y = CENTER.y - (ISLAND.y + ISLAND.height / 2) * scale
   const href = `data:image/png;base64,${LOGO.toString('base64')}`
   const points = ISLAND_OUTLINE.map((p) => p.join(',')).join(' ')
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 512 512">
@@ -48,18 +45,27 @@ function svg(maskable: boolean, withText = true): string {
 <g transform="translate(${x} ${y}) scale(${scale})">
   <image clip-path="url(#island)" width="${LOGO_SIZE}" height="${LOGO_SIZE}" xlink:href="${href}"/>
 </g>
-${withText ? '' : '<!--'}<text x="256" y="452" text-anchor="middle" font-family="Segoe UI, Arial" font-weight="700" font-size="84" fill="#000000">LongDong</text>${withText ? '' : '-->'}
+<text x="256" y="452" text-anchor="middle" font-family="Segoe UI, Arial" font-weight="700" font-size="84" fill="#000000">LongDong</text>
 </g>
 </svg>`
 }
 
-function png(size: number, maskable = false, withText = true): Buffer {
-  return new Resvg(svg(maskable, withText), { fitTo: { mode: 'width', value: size } }).render().asPng()
+function png(size: number, maskable = false): Buffer {
+  return new Resvg(svg(maskable), { fitTo: { mode: 'width', value: size } }).render().asPng()
+}
+
+/** 瀏覽器分頁的小圖示：尺寸太小，只放「LD」 */
+function favicon(size: number): Buffer {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<rect width="64" height="64" rx="10" fill="#000000"/>
+<text x="32" y="45" text-anchor="middle" font-family="Arial Black, Arial" font-weight="900" font-size="34" letter-spacing="-1" fill="#ffffff">LD</text>
+</svg>`
+  return new Resvg(svg, { fitTo: { mode: 'width', value: size } }).render().asPng()
 }
 
 mkdirSync(OUT, { recursive: true })
 writeFileSync(resolve(OUT, 'icon-512.png'), png(512))
 writeFileSync(resolve(OUT, 'icon-192.png'), png(192))
 writeFileSync(resolve(OUT, 'icon-maskable-512.png'), png(512, true))
-writeFileSync(resolve(OUT, 'favicon-48.png'), png(48, false, false))
+writeFileSync(resolve(OUT, 'favicon-48.png'), favicon(48))
 console.log('icons written to', OUT)
