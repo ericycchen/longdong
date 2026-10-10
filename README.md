@@ -70,4 +70,5 @@ npm run preview      # 預覽 build 結果，可測試離線
 ## 授權
 
 - 程式碼：[MIT](LICENSE)
+- TOCC 標誌與由其產生的 App 圖示（`assets/`、`public/icons/`）：屬臺灣戶外攀岩協會所有，不適用 MIT
 - 路線資料（`public/data/`）：[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)，© 臺灣戶外攀岩協會（TOCC）固定點更新計畫

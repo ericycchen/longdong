@@ -1,94 +1,65 @@
 /**
- * 產生 PWA 圖示（public/icons/）。圖形很簡單，直接逐點繪製，不需要額外的影像套件。
+ * 產生 App 圖示（public/icons/）：取臺灣戶外攀岩協會（TOCC）標誌中央的
+ * 「臺灣島＋攀岩者」圖形，放在白底上，下方加上「LongDong」字樣。
+ * 標誌外圈文字在手機桌面尺寸下無法辨識，所以不用。
+ *
+ * 字樣使用系統字型（Segoe UI Bold），在不同電腦上重新產生可能略有差異；圖示已 commit 進 repo。
+ *
+ * 輸出兩種：一般圖示（滿版）與 maskable 圖示（Android 會裁成圓形等形狀，
+ * 所以把整個圖案縮到中央 80% 的安全區內）。
  *   npx tsx scripts/gen-icons.ts
+ *
+ * 來源：assets/tocc-logo.png（1134×1134，取自 tocc-climbing.org）。
+ * 輸出為滿版方形，可同時當作 maskable 圖示：圖形落在中央 80% 的安全區內。
  */
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { Resvg } from '@resvg/resvg-js'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { deflateSync } from 'node:zlib'
 
-const OUT = resolve(import.meta.dirname, '../public/icons')
-const BG = [0x1f, 0x4e, 0x5f]
-const ROCK = [0xf6, 0xf4, 0xef]
-const SEA = [0x79, 0xb8, 0xcc]
+const ROOT = resolve(import.meta.dirname, '..')
+const OUT = resolve(ROOT, 'public/icons')
+const LOGO = readFileSync(resolve(ROOT, 'assets/tocc-logo.png'))
+const LOGO_SIZE = 1134
 
-// 以 0–1 座標描述：一座岩壁（多邊形）加一道海浪線
-const ROCK_POLY: [number, number][] = [
-  [0.18, 0.72], [0.38, 0.3], [0.5, 0.44], [0.6, 0.24], [0.82, 0.72],
+// 臺灣島在原圖中的範圍（像素）
+const ISLAND = { x: 385, y: 342, width: 320, height: 525 }
+// 沿著島外緣、留一點邊的多邊形（原圖座標），用來排除外圈文字
+const ISLAND_OUTLINE = [
+  [628, 325], [715, 375], [718, 565], [640, 710], [575, 800], [545, 885], [485, 880],
+  [455, 810], [415, 730], [380, 665], [378, 575], [425, 505], [478, 455], [530, 370],
 ]
+// 島的高度與中心在 512 畫布上的位置
+const TARGET_HEIGHT = 330
+const CENTER = { x: 256, y: 192 }
 
-function inside(x: number, y: number, poly: [number, number][]): boolean {
-  let hit = false
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const [xi, yi] = poly[i]
-    const [xj, yj] = poly[j]
-    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) hit = !hit
-  }
-  return hit
+/** favicon 太小、字看不清楚，只放島（置中、放大） */
+function svg(maskable: boolean, withText = true): string {
+  const height = withText ? TARGET_HEIGHT : 470
+  const center = withText ? CENTER : { x: 256, y: 256 }
+  const scale = height / ISLAND.height
+  const x = center.x - (ISLAND.x + ISLAND.width / 2) * scale
+  const y = center.y - (ISLAND.y + ISLAND.height / 2) * scale
+  const href = `data:image/png;base64,${LOGO.toString('base64')}`
+  const points = ISLAND_OUTLINE.map((p) => p.join(',')).join(' ')
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 512 512">
+<defs><clipPath id="island"><polygon points="${points}"/></clipPath></defs>
+<rect width="512" height="512" fill="#ffffff"/>
+<g transform="${maskable ? 'translate(51.2 51.2) scale(0.8)' : ''}">
+<g transform="translate(${x} ${y}) scale(${scale})">
+  <image clip-path="url(#island)" width="${LOGO_SIZE}" height="${LOGO_SIZE}" xlink:href="${href}"/>
+</g>
+${withText ? '' : '<!--'}<text x="256" y="452" text-anchor="middle" font-family="Segoe UI, Arial" font-weight="700" font-size="84" fill="#000000">LongDong</text>${withText ? '' : '-->'}
+</g>
+</svg>`
 }
 
-function pixel(x: number, y: number): number[] {
-  if (inside(x, y, ROCK_POLY)) return ROCK
-  const wave = 0.78 + 0.025 * Math.sin(x * Math.PI * 6)
-  if (y > wave && y < wave + 0.045 && x > 0.14 && x < 0.86) return SEA
-  return BG
+function png(size: number, maskable = false, withText = true): Buffer {
+  return new Resvg(svg(maskable, withText), { fitTo: { mode: 'width', value: size } }).render().asPng()
 }
-
-function png(size: number): Buffer {
-  const raw = Buffer.alloc((size * 3 + 1) * size)
-  const ss = 3 // 超取樣抗鋸齒
-  for (let y = 0; y < size; y++) {
-    raw[y * (size * 3 + 1)] = 0
-    for (let x = 0; x < size; x++) {
-      const acc = [0, 0, 0]
-      for (let sy = 0; sy < ss; sy++)
-        for (let sx = 0; sx < ss; sx++) {
-          const c = pixel((x + (sx + 0.5) / ss) / size, (y + (sy + 0.5) / ss) / size)
-          for (let k = 0; k < 3; k++) acc[k] += c[k]
-        }
-      const o = y * (size * 3 + 1) + 1 + x * 3
-      for (let k = 0; k < 3; k++) raw[o + k] = Math.round(acc[k] / (ss * ss))
-    }
-  }
-  const chunk = (type: string, data: Buffer) => {
-    const len = Buffer.alloc(4)
-    len.writeUInt32BE(data.length)
-    const td = Buffer.concat([Buffer.from(type), data])
-    const crc = Buffer.alloc(4)
-    crc.writeUInt32BE(crc32(td))
-    return Buffer.concat([len, td, crc])
-  }
-  const ihdr = Buffer.alloc(13)
-  ihdr.writeUInt32BE(size, 0)
-  ihdr.writeUInt32BE(size, 4)
-  ihdr[8] = 8 // bit depth
-  ihdr[9] = 2 // RGB
-  return Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    chunk('IHDR', ihdr),
-    chunk('IDAT', deflateSync(raw)),
-    chunk('IEND', Buffer.alloc(0)),
-  ])
-}
-
-function crc32(buf: Buffer): number {
-  let c = ~0
-  for (const b of buf) {
-    c ^= b
-    for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1))
-  }
-  return ~c >>> 0
-}
-
-const hex = (c: number[]) => '#' + c.map((v) => v.toString(16).padStart(2, '0')).join('')
-const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-<rect width="100" height="100" rx="18" fill="${hex(BG)}"/>
-<polygon points="${ROCK_POLY.map(([x, y]) => `${x * 100},${y * 100}`).join(' ')}" fill="${hex(ROCK)}"/>
-<path d="M14 80 Q 22 77 30 80 T 46 80 T 62 80 T 78 80 L 86 80" stroke="${hex(SEA)}" stroke-width="4" fill="none" stroke-linecap="round"/>
-</svg>
-`
 
 mkdirSync(OUT, { recursive: true })
-writeFileSync(resolve(OUT, 'icon-192.png'), png(192))
 writeFileSync(resolve(OUT, 'icon-512.png'), png(512))
-writeFileSync(resolve(OUT, 'icon.svg'), svg)
+writeFileSync(resolve(OUT, 'icon-192.png'), png(192))
+writeFileSync(resolve(OUT, 'icon-maskable-512.png'), png(512, true))
+writeFileSync(resolve(OUT, 'favicon-48.png'), png(48, false, false))
 console.log('icons written to', OUT)

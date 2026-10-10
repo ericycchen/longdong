@@ -23,6 +23,9 @@ SOFTWARE.
 ---
 
 The route data in `public/data/` is maintained by the Rebolting Project of
-臺灣戶外攀岩協會 (TOCC, https://www.tocc-climbing.org/rebolting-project) and is
-licensed separately under CC BY-SA 4.0
-(https://creativecommons.org/licenses/by-sa/4.0/).
+臺灣戶外攀岩協會 Taiwan Outdoor Climbers' Coalition (TOCC,
+https://www.tocc-climbing.org/rebolting-project) and is licensed separately
+under CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/).
+
+The TOCC logo (`assets/tocc-logo.png` and the app icons derived from it in
+`public/icons/`) belongs to TOCC and is not covered by the MIT license.
