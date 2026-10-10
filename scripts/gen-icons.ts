@@ -32,7 +32,8 @@ const ISLAND_OUTLINE = [
 const TARGET_HEIGHT = 330
 const CENTER = { x: 256, y: 192 }
 
-function svg(maskable: boolean): string {
+/** transparent：不加白底（Facebook 應用程式圖示要求透明背景） */
+function svg(maskable: boolean, transparent = false): string {
   const scale = TARGET_HEIGHT / ISLAND.height
   const x = CENTER.x - (ISLAND.x + ISLAND.width / 2) * scale
   const y = CENTER.y - (ISLAND.y + ISLAND.height / 2) * scale
@@ -40,7 +41,7 @@ function svg(maskable: boolean): string {
   const points = ISLAND_OUTLINE.map((p) => p.join(',')).join(' ')
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 512 512">
 <defs><clipPath id="island"><polygon points="${points}"/></clipPath></defs>
-<rect width="512" height="512" fill="#ffffff"/>
+${transparent ? '' : '<rect width="512" height="512" fill="#ffffff"/>'}
 <g transform="${maskable ? 'translate(51.2 51.2) scale(0.8)' : ''}">
 <g transform="translate(${x} ${y}) scale(${scale})">
   <image clip-path="url(#island)" width="${LOGO_SIZE}" height="${LOGO_SIZE}" xlink:href="${href}"/>
@@ -50,8 +51,8 @@ function svg(maskable: boolean): string {
 </svg>`
 }
 
-function png(size: number, maskable = false): Buffer {
-  return new Resvg(svg(maskable), { fitTo: { mode: 'width', value: size } }).render().asPng()
+function png(size: number, maskable = false, transparent = false): Buffer {
+  return new Resvg(svg(maskable, transparent), { fitTo: { mode: 'width', value: size } }).render().asPng()
 }
 
 /** 瀏覽器分頁的小圖示：尺寸太小，只放「LD」 */
@@ -68,4 +69,6 @@ writeFileSync(resolve(OUT, 'icon-512.png'), png(512))
 writeFileSync(resolve(OUT, 'icon-192.png'), png(192))
 writeFileSync(resolve(OUT, 'icon-maskable-512.png'), png(512, true))
 writeFileSync(resolve(OUT, 'favicon-48.png'), favicon(48))
+// Facebook 開發者後台的應用程式圖示（1024×1024、透明背景），不放進網站
+writeFileSync(resolve(ROOT, 'assets/facebook-app-icon-1024.png'), png(1024, false, true))
 console.log('icons written to', OUT)
