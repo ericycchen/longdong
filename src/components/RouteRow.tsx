@@ -1,6 +1,7 @@
 import type { RouteRef } from '../data/dataset'
 import { TYPE_LABEL } from '../format'
 import { href } from '../router'
+import { SafetyLight } from './SafetyLight'
 import { StatusBadge } from './StatusBadge'
 
 export function RouteRow({ item, showPlace = false }: { item: RouteRef; showPlace?: boolean }) {
@@ -19,7 +20,10 @@ export function RouteRow({ item, showPlace = false }: { item: RouteRef; showPlac
           )}
         </span>
         <span className="route-meta">
-          {route.grade && <span className="grade">{route.grade}</span>}
+          <span className="grade-line">
+            {!route.isFixture && <SafetyLight safety={route.safety} />}
+            {route.grade && <span className="grade">{route.grade}</span>}
+          </span>
           <span className="type">{route.isFixture ? '固定點' : route.type ? TYPE_LABEL[route.type] : ''}</span>
           {route.status && <StatusBadge status={route.status} compact />}
         </span>

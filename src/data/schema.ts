@@ -24,6 +24,9 @@ export const RouteStatus = z.enum([
   'unknown', // 待查、待確認
 ])
 
+/** 安全評級燈號：Sheet 上以三顆點表示，亮起的那一顆即為評級 */
+export const Safety = z.enum(['green', 'yellow', 'red'])
+
 export const Bolt = z.object({
   /** B01…B18 是路線上的 bolt，A01…A04 是 anchor */
   position: z.string().regex(/^[AB]\d{2}$/),
@@ -49,6 +52,8 @@ export const Route = z.object({
   /** 沒有難度和種類的項目，例如救援固定點、私設固定點 */
   isFixture: z.boolean(),
   name: LocalizedName,
+  /** 多繩距路線的第幾段（從名稱的「| P2」取得） */
+  pitch: z.number().int().positive().optional(),
   grade: z.string().optional(),
   /** 用來排序和篩選的難度數值，5.10a = 40，5.10b = 41… */
   gradeValue: z.number().optional(),
@@ -57,7 +62,7 @@ export const Route = z.object({
   firstAscent: z.string().optional(),
   firstAscentDate: PartialDate.optional(),
   description: z.string().optional(),
-  safety: z.string().optional(),
+  safety: Safety.optional(),
   bolts: z.array(Bolt),
   anchors: z.array(Bolt),
   anchorHardware: z.array(AnchorHardware),
@@ -105,6 +110,7 @@ export const Dataset = z.object({
 export type LocalizedName = z.infer<typeof LocalizedName>
 export type RouteType = z.infer<typeof RouteType>
 export type RouteStatus = z.infer<typeof RouteStatus>
+export type Safety = z.infer<typeof Safety>
 export type Bolt = z.infer<typeof Bolt>
 export type AnchorHardware = z.infer<typeof AnchorHardware>
 export type Route = z.infer<typeof Route>

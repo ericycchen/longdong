@@ -1,5 +1,5 @@
 import Papa from 'papaparse'
-import type { AnchorHardware, Area, Bolt, Hardware, Route, Sector } from '../../src/data/schema'
+import type { AnchorHardware, Area, Bolt, Hardware, Route, Safety, Sector } from '../../src/data/schema'
 import {
   cleanParagraphs,
   cleanPeople,
@@ -40,7 +40,15 @@ export interface ParsedArea extends Area {
   warnings: string[]
 }
 
-export function parseAreaSheet(text: string, areaId: string, expectedZh: string): ParsedArea {
+/**
+ * @param safety 列索引 → 安全評級燈號，null 為尚未評級（由 htmlview 解析，見 safety.ts）
+ */
+export function parseAreaSheet(
+  text: string,
+  areaId: string,
+  expectedZh: string,
+  safety: Map<number, Safety | null> = new Map(),
+): ParsedArea {
   const rows = readCsv(text)
   const warnings: string[] = []
 
@@ -144,6 +152,7 @@ export function parseAreaSheet(text: string, areaId: string, expectedZh: string)
       id: number ? `r${number}` : `${areaId}-x${++unnumbered}`,
       number,
       isFixture: !grade && !type,
+      pitch: parsePitch(name.zh),
       name,
       grade,
       gradeValue: gradeValue(grade),
@@ -152,7 +161,7 @@ export function parseAreaSheet(text: string, areaId: string, expectedZh: string)
       firstAscent: cleanPeople(first[C.fa]),
       firstAscentDate: parseDate(cell(C.faDate)),
       description: cleanParagraphs(first[C.description]),
-      safety: cell(C.safety) || undefined,
+      safety: safety.get(block.line - 1) ?? undefined,
       bolts,
       anchors,
       anchorHardware,
@@ -162,6 +171,9 @@ export function parseAreaSheet(text: string, areaId: string, expectedZh: string)
       statusDate: parseDate(cell(C.statusDate)),
       lastTested: latestDate([...bolts, ...anchors].flatMap((b) => b.tests)),
       notes: cleanText(first[C.notes]),
+    }
+    if (cell(C.safety).includes('●') && !safety.has(block.line - 1)) {
+      warnings.push(`[${areaId}] #${number ?? '0'} ${name.zh}：讀不到安全評級燈號`)
     }
     if (grade && route.gradeValue === undefined && !/\?\?/.test(grade)) {
       warnings.push(`[${areaId}] #${number ?? '0'} ${name.zh}：無法判讀難度「${grade}」`)
@@ -250,6 +262,12 @@ export function parseHardwareSheet(text: string): Hardware[] {
     out.push({ code, description: cleanText(r[c + 1]) ?? code })
   }
   return out
+}
+
+/** 「大懸岩 | P2」→ 2 */
+export function parsePitch(zhName: string): number | undefined {
+  const m = zhName.match(/\|\s*P(\d+)/i)
+  return m ? Number(m[1]) : undefined
 }
 
 function stripUndefined<T extends object>(obj: T): T {

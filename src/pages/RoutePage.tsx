@@ -1,5 +1,6 @@
 import type { LoadedData } from '../data/dataset'
 import type { Bolt } from '../data/schema'
+import { SafetyLight } from '../components/SafetyLight'
 import { StatusBadge } from '../components/StatusBadge'
 import { TYPE_LABEL, formatDate, yearsSince } from '../format'
 import { href } from '../router'
@@ -10,6 +11,7 @@ export function RoutePage({ data, id }: { data: LoadedData; id: string }) {
   if (!ref) return <NotFound />
   const { route, sector, area } = ref
   const danger = route.status === 'closed' || route.status === 'to-remove'
+  const pitches = route.pitch ? sector.routes.filter((r) => r.pitch && baseName(r.name.zh) === baseName(route.name.zh)) : []
 
   return (
     <article className="route">
@@ -28,8 +30,12 @@ export function RoutePage({ data, id }: { data: LoadedData; id: string }) {
           {route.type && <span>{TYPE_LABEL[route.type]}</span>}
           {route.isFixture && <span>固定點</span>}
           {route.heightM && <span>{route.heightM} m</span>}
-          {route.safety && <span title="安全評級">{route.safety}</span>}
         </div>
+        {!route.isFixture && (
+          <div className="safety-row">
+            <SafetyLight safety={route.safety} showLabel />
+          </div>
+        )}
       </header>
 
       {danger && (
@@ -73,6 +79,29 @@ export function RoutePage({ data, id }: { data: LoadedData; id: string }) {
         </dl>
       </section>
 
+      {pitches.length > 1 && (
+        <section>
+          <h2>繩距</h2>
+          <ul className="route-list">
+            {pitches.map((p) => (
+              <li key={p.id}>
+                <a className={`pitch-row${p.id === route.id ? ' current' : ''}`} href={href.route(p.id)}>
+                  <span className="pitch-no">P{p.pitch}</span>
+                  <span className="route-name">
+                    <span className="zh">{p.name.zh}</span>
+                    {p.heightM && <span className="en">{p.heightM} m</span>}
+                  </span>
+                  <span className="grade-line">
+                    <SafetyLight safety={p.safety} />
+                    <span className="grade">{p.grade}</span>
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {route.description && (
         <section>
           <h2>路線資訊</h2>
@@ -107,6 +136,11 @@ export function RoutePage({ data, id }: { data: LoadedData; id: string }) {
       )}
     </article>
   )
+}
+
+/** 「自由裂隙 | P2 右」→「自由裂隙」，用來找出同一條多繩距路線的各段 */
+function baseName(zh: string): string {
+  return zh.replace(/\s*\|\s*P\d+.*$/i, '').trim()
 }
 
 function ageText(date: string): string {
