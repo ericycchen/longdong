@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { LoadedData } from '../data/dataset'
 import { RouteRow } from '../components/RouteRow'
-import { SignInPrompt } from '../components/SignInPrompt'
+import { FACEBOOK_LOGIN_ENABLED, SignInPrompt } from '../components/SignInPrompt'
 import { formatDate, relativeTime } from '../format'
 import { TICK_STYLE_LABEL, isSent } from '../personal/model'
 import { deleteTick, setFavorite, usePersonal } from '../personal/store'
@@ -32,7 +32,7 @@ export function MePage({ data }: { data: LoadedData }) {
             <li>替路線評分、留言分享 beta 與現場狀況</li>
             <li>在手機和電腦之間自動同步，沒網路時也能記錄</li>
           </ul>
-          <SignInPrompt message="用 Google 或 Facebook 帳號登入，Email 不會公開。" />
+          <SignInPrompt message={`用 Google${FACEBOOK_LOGIN_ENABLED ? ' 或 Facebook' : ''} 帳號登入，Email 不會公開。`} />
         </section>
       )}
       <p className="small me-links">
