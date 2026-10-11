@@ -5,6 +5,7 @@ export type Page =
   | { name: 'home' }
   | { name: 'search' }
   | { name: 'area'; id: string }
+  | { name: 'sector'; id: string }
   | { name: 'route'; id: string }
   | { name: 'me' }
   | { name: 'about' }
@@ -26,6 +27,7 @@ export function parseHash(hash: string): Page {
   const [, kind, ...rest] = path.split('/')
   const id = rest.join('/')
   if ((kind === 'area' || kind === 'route') && id) return { name: kind, id: upgradeId(kind, id) }
+  if (kind === 'sector' && id) return { name: 'sector', id }
   if (kind === 'search') return { name: 'search' }
   if (kind === 'me') return { name: 'me' }
   if (kind === 'about') return { name: 'about' }
@@ -37,6 +39,7 @@ export const href = {
   home: () => '#/',
   search: (q = '') => (q ? `#/search?q=${encodeURIComponent(q)}` : '#/search'),
   area: (id: string) => `#/area/${id}`,
+  sector: (id: string) => `#/sector/${id}`,
   route: (id: string) => `#/route/${id}`,
   me: () => '#/me',
   about: () => '#/about',

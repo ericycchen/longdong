@@ -12,6 +12,7 @@ export interface LoadedData {
   routes: RouteRef[]
   routeById: Map<string, RouteRef>
   areaById: Map<string, Area>
+  sectorById: Map<string, { sector: Sector; area: Area }>
   hardwareByCode: Map<string, string>
 }
 
@@ -24,6 +25,7 @@ function index(dataset: Dataset): LoadedData {
     routes,
     routeById: new Map(routes.map((r) => [r.route.id, r])),
     areaById: new Map(dataset.areas.map((a) => [a.id, a])),
+    sectorById: new Map(dataset.areas.flatMap((area) => area.sectors.map((sector) => [sector.id, { sector, area }] as const))),
     hardwareByCode: new Map(dataset.hardware.map((h) => [h.code, h.description])),
   }
 }

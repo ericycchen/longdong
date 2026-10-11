@@ -26,7 +26,13 @@ export function RoutePage({ data, id }: { data: LoadedData; id: string }) {
   return (
     <article className="route">
       <nav className="crumbs">
-        <a href={href.home()}>龍洞</a> / <a href={href.area(area.id)}>{area.name.zh}</a> / {sector.name.zh}
+        <a href={href.area(area.id)}>{area.name.zh}</a>
+        {area.sectors.length > 1 && (
+          <>
+            {' / '}
+            <a href={href.sector(sector.id)}>{sector.name.zh}</a>
+          </>
+        )}
       </nav>
 
       <header className="route-head">

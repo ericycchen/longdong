@@ -5,6 +5,7 @@ describe('parseHash', () => {
   it('ID 可以含 "/"', () => {
     expect(parseHash('#/route/longdong/100.1')).toEqual({ name: 'route', id: 'longdong/100.1' })
     expect(parseHash('#/area/longdong/back-door')).toEqual({ name: 'area', id: 'longdong/back-door' })
+    expect(parseHash('#/sector/longdong/back-door-s1')).toEqual({ name: 'sector', id: 'longdong/back-door-s1' })
   })
 
   it('舊網址轉成新 ID', () => {

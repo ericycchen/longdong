@@ -4,7 +4,7 @@ import { BottomNav } from './components/BottomNav'
 import { useData } from './data/dataset'
 import { relativeTime } from './format'
 import { AboutPage } from './pages/AboutPage'
-import { AreaPage } from './pages/AreaPage'
+import { AreaPage, SectorPage } from './pages/AreaPage'
 import { HomePage } from './pages/HomePage'
 import { MePage } from './pages/MePage'
 import { RoutePage } from './pages/RoutePage'
@@ -55,6 +55,8 @@ export function App() {
         {state.status === 'ready' &&
           (page.name === 'area' ? (
             <AreaPage key={page.id} data={state.data} id={page.id} />
+          ) : page.name === 'sector' ? (
+            <SectorPage key={page.id} data={state.data} id={page.id} />
           ) : page.name === 'route' ? (
             <RoutePage data={state.data} id={page.id} />
           ) : page.name === 'search' ? (
