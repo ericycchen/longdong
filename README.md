@@ -90,6 +90,11 @@ npm run preview      # 預覽 build 結果，可測試離線
 
 新增區域分頁時，在 `scripts/sheet.config.ts` 的 `AREA_TABS` 加上一筆。
 
+## 開發規範
+
+- [`CLAUDE.md`](CLAUDE.md)：開發原則、提交方式與各類改動的驗證清單（也是 Claude Code 在本 repo 的指示）。
+- [`docs/review_and_implementation_protocol.md`](docs/review_and_implementation_protocol.md)：審查與實作規範——權責分界、檢查與回報的成立條件、判定順序、審查時機。
+
 ## 部署
 
 1. 在 GitHub repo 的 **Settings → Pages** 把 Source 設為 **GitHub Actions**。
