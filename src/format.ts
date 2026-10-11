@@ -61,3 +61,15 @@ export function relativeTime(iso: string, now = new Date()): string {
   if (days < 365) return `${Math.floor(days / 30)} 個月前`
   return `${Math.floor(days / 365)} 年前`
 }
+
+export type GradeBand = 'easy' | 'g10' | 'g11' | 'g12' | 'g13'
+
+/** 難度區間，用來替難度標籤上淡色底：5.9 以下、5.10、5.11、5.12、5.13 以上 */
+export function gradeBand(gradeValue: number | undefined): GradeBand | undefined {
+  if (gradeValue === undefined) return undefined
+  if (gradeValue < 40) return 'easy'
+  if (gradeValue < 44) return 'g10'
+  if (gradeValue < 48) return 'g11'
+  if (gradeValue < 52) return 'g12'
+  return 'g13'
+}

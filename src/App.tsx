@@ -30,6 +30,9 @@ export function App() {
     <>
       <header className="topbar">
         <a className="brand" href={href.home()}>
+          <span className="brand-mark" aria-hidden>
+            LD
+          </span>
           龍洞攀岩資料庫
         </a>
       </header>

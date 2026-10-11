@@ -6,6 +6,7 @@ import { useCloud } from '../personal/sync'
 import { routeKey, summarize } from '../social/model'
 import { useSocial } from '../social/store'
 import { href } from '../router'
+import { GradePill } from './GradePill'
 import { SafetyLight } from './SafetyLight'
 import { StarsBadge } from './Stars'
 import { StatusBadge } from './StatusBadge'
@@ -42,7 +43,7 @@ export function RouteRow({ item, showPlace = false }: { item: RouteRef; showPlac
         <span className="route-meta">
           <span className="grade-line">
             {!route.isFixture && <SafetyLight safety={route.safety} />}
-            {route.grade && <span className="grade">{route.grade}</span>}
+            <GradePill grade={route.grade} value={route.gradeValue} />
           </span>
           <span className="type">{typeText(route)}</span>
           <span className="meta-line">

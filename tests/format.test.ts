@@ -29,3 +29,16 @@ describe('quickdraws', () => {
     expect(typeText(route({ isFixture: true }))).toBe('固定點')
   })
 })
+
+import { gradeBand } from '../src/format'
+
+describe('gradeBand', () => {
+  it('依難度分區', () => {
+    expect(gradeBand(36)).toBe('easy') // 5.9
+    expect(gradeBand(40)).toBe('g10') // 5.10a
+    expect(gradeBand(47)).toBe('g11') // 5.11d
+    expect(gradeBand(48)).toBe('g12') // 5.12a
+    expect(gradeBand(53)).toBe('g13') // 5.13b
+    expect(gradeBand(undefined)).toBeUndefined()
+  })
+})

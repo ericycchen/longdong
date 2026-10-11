@@ -1,6 +1,7 @@
 import type { LoadedData } from '../data/dataset'
 import type { Bolt } from '../data/schema'
 import { CommentsSection } from '../components/CommentsSection'
+import { GradePill } from '../components/GradePill'
 import { PersonalPanel } from '../components/PersonalPanel'
 import { RatingSection } from '../components/RatingSection'
 import { SafetyLight } from '../components/SafetyLight'
@@ -35,9 +36,9 @@ export function RoutePage({ data, id }: { data: LoadedData; id: string }) {
           {route.name.en && <span className="en">{route.name.en}</span>}
         </h1>
         <div className="facts">
-          {route.grade && <span className="grade big">{route.grade}</span>}
-          {(route.type || route.isFixture) && <span>{typeText(route)}</span>}
-          {route.heightM && <span>{route.heightM} m</span>}
+          <GradePill grade={route.grade} value={route.gradeValue} size="lg" />
+          {(route.type || route.isFixture) && <span className="fact">{typeText(route)}</span>}
+          {route.heightM && <span className="fact">{route.heightM} m</span>}
         </div>
         {!route.isFixture && (
           <div className="safety-row">
@@ -113,7 +114,7 @@ export function RoutePage({ data, id }: { data: LoadedData; id: string }) {
                   </span>
                   <span className="grade-line">
                     <SafetyLight safety={p.safety} />
-                    <span className="grade">{p.grade}</span>
+                    <GradePill grade={p.grade} value={p.gradeValue} size="sm" />
                   </span>
                 </a>
               </li>
