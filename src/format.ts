@@ -91,3 +91,33 @@ export function gradeDistribution(routes: { gradeValue?: number }[]): { band: Gr
   }
   return GRADE_BANDS.map((b) => ({ ...b, count: counts.get(b.band) ?? 0 }))
 }
+
+/** 路線類型簡化為兩類：「運攀 10 · 傳攀/其他 5」（為 0 的不顯示） */
+export function typeSummary(routes: { type?: RouteType; isFixture?: boolean }[]): string {
+  let sport = 0
+  let other = 0
+  for (const r of routes) {
+    if (r.isFixture || !r.type) continue
+    if (r.type === 'sport') sport++
+    else other++
+  }
+  return [sport && `運攀 ${sport}`, other && `傳攀/其他 ${other}`].filter(Boolean).join(' · ')
+}
+
+/**
+ * 分區的識別色：以所屬區域的顏色為基礎，依分區順序由深到淺。
+ * Sheet 上沒有分區專屬的顏色，這樣既看得出屬於同一區，又能彼此區分。
+ */
+export function sectorColor(areaColor: string | undefined, index: number, count: number): string | undefined {
+  if (!areaColor) return undefined
+  if (count <= 1) return areaColor
+  // t：-0.3（較深）到 +0.45（較淺）
+  const t = -0.3 + (0.75 * index) / (count - 1)
+  return mix(areaColor, t < 0 ? '#000000' : '#ffffff', Math.abs(t))
+}
+
+function mix(a: string, b: string, amount: number): string {
+  const pa = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16))
+  const pb = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16))
+  return '#' + pa.map((v, i) => Math.round(v + (pb[i] - v) * amount).toString(16).padStart(2, '0')).join('')
+}

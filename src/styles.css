@@ -1652,3 +1652,17 @@ main {
 .nowrap {
   white-space: nowrap;
 }
+
+.color-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 10px;
+  border-radius: 50%;
+  vertical-align: 0.15em;
+}
+
+.area-row .sector-name {
+  font-size: 1.1rem;
+  font-weight: 750;
+}

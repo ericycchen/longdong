@@ -1,8 +1,7 @@
 import type { LoadedData } from '../data/dataset'
 import { GradeDistribution } from '../components/Charts'
-import { gradeDistribution } from '../format'
+import { gradeDistribution, typeSummary } from '../format'
 import { href } from '../router'
-import { typeSummary } from './AreaPage'
 
 /** 首頁：龍洞的各區域，一區一列；左框用 Sheet 上該區域的顏色 */
 export function HomePage({ data }: { data: LoadedData }) {

@@ -57,3 +57,24 @@ describe('gradeDistribution', () => {
     ])
   })
 })
+
+import { sectorColor, typeSummary } from '../src/format'
+
+describe('typeSummary', () => {
+  it('簡化為運攀與傳攀/其他，固定點不計', () => {
+    expect(
+      typeSummary([{ type: 'sport' }, { type: 'sport' }, { type: 'trad' }, { type: 'boulder' }, { type: 'toprope' }, { isFixture: true }]),
+    ).toBe('運攀 2 · 傳攀/其他 3')
+    expect(typeSummary([{ type: 'trad' }])).toBe('傳攀/其他 1')
+    expect(typeSummary([])).toBe('')
+  })
+})
+
+describe('sectorColor', () => {
+  it('依區域色由深到淺', () => {
+    expect(sectorColor('#cc0000', 0, 1)).toBe('#cc0000')
+    expect(sectorColor('#cc0000', 0, 3)).toBe('#8f0000')
+    expect(sectorColor('#cc0000', 2, 3)).toBe('#e37373')
+    expect(sectorColor(undefined, 0, 3)).toBeUndefined()
+  })
+})

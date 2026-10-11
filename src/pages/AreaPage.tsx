@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import type { LoadedData } from '../data/dataset'
-import type { Route, RouteType, Sector } from '../data/schema'
+import type { CSSProperties } from 'react'
+import type { Area, Route, RouteType, Sector } from '../data/schema'
+import { GradeDistribution } from '../components/Charts'
 import { RouteRow } from '../components/RouteRow'
-import { TYPE_LABEL } from '../format'
+import { TYPE_LABEL, gradeDistribution, sectorColor, typeSummary } from '../format'
 import { href } from '../router'
 
 /** 區域頁：列出分區，點進去才看路線（只有一個分區時直接顯示路線） */
@@ -14,6 +16,7 @@ export function AreaPage({ data, id }: { data: LoadedData; id: string }) {
   return (
     <>
       <h1>
+        <ColorDot color={area.color} />
         {area.name.zh} <span className="en">{area.name.en}</span>
       </h1>
       <p className="muted small page-sub">
@@ -30,10 +33,10 @@ export function AreaPage({ data, id }: { data: LoadedData; id: string }) {
       {area.sectors.length === 1 ? (
         <SectorRoutes data={data} sector={area.sectors[0]} />
       ) : (
-        <ul className="sector-grid">
-          {area.sectors.map((sector) => (
+        <ul className="area-list">
+          {area.sectors.map((sector, i) => (
             <li key={sector.id}>
-              <SectorCard sector={sector} />
+              <SectorCard sector={sector} color={sectorColor(area.color, i, area.sectors.length)} />
             </li>
           ))}
         </ul>
@@ -42,24 +45,31 @@ export function AreaPage({ data, id }: { data: LoadedData; id: string }) {
   )
 }
 
-function SectorCard({ sector }: { sector: Sector }) {
+function SectorCard({ sector, color }: { sector: Sector; color?: string }) {
   const routes = sector.routes.filter((r) => !r.isFixture)
   const range = gradeRange(routes)
   return (
-    <a className="sector-card" href={href.sector(sector.id)}>
-      <span className="sector-name">
-        {sector.name.zh}
+    <a className="area-row" href={href.sector(sector.id)} style={{ '--area-color': color } as CSSProperties}>
+      <span className="area-info">
+        <span className="sector-name">{sector.name.zh}</span>
         {sector.name.en && <span className="en">{sector.name.en}</span>}
+        <span className="area-count">
+          {routes.length} 條{range && <span className="muted nowrap">・{range}</span>}
+        </span>
+        <span className="area-types">{typeSummary(routes)}</span>
       </span>
-      <span className="sector-stats">
-        <strong>{routes.length}</strong> 條{range && <span className="muted">・{range}</span>}
-      </span>
-      <span className="area-types">{typeSummary(routes)}</span>
-      <span className="chevron" aria-hidden>
-        ›
-      </span>
+      <GradeDistribution bands={gradeDistribution(routes)} />
     </a>
   )
+}
+
+/** 區域與分區頁標題旁的識別色 */
+function ColorDot({ color }: { color?: string }) {
+  return color ? <span className="color-dot" style={{ background: color }} aria-hidden /> : null
+}
+
+export function areaSectorColor(area: Area, sector: Sector): string | undefined {
+  return sectorColor(area.color, area.sectors.indexOf(sector), area.sectors.length)
 }
 
 /** 分區頁：路線清單，可依種類篩選 */
@@ -73,6 +83,7 @@ export function SectorPage({ data, id }: { data: LoadedData; id: string }) {
         <a href={href.area(area.id)}>{area.name.zh}</a>
       </nav>
       <h1>
+        <ColorDot color={areaSectorColor(area, sector)} />
         {sector.name.zh} <span className="en">{sector.name.en}</span>
       </h1>
       <SectorRoutes data={data} sector={sector} />
@@ -104,15 +115,6 @@ function SectorRoutes({ data, sector }: { data: LoadedData; sector: Sector }) {
       </ul>
     </>
   )
-}
-
-export function typeSummary(routes: Route[]): string {
-  const byType = new Map<RouteType, number>()
-  for (const r of routes) if (r.type) byType.set(r.type, (byType.get(r.type) ?? 0) + 1)
-  return [...byType]
-    .sort((a, b) => b[1] - a[1])
-    .map(([t, n]) => `${TYPE_LABEL[t]} ${n}`)
-    .join(' · ')
 }
 
 /** 「5.7–5.12a」；只有一種難度時只顯示一個 */
