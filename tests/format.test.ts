@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { Bolt, Route } from '../src/data/schema'
 import { quickdraws, typeText } from '../src/format'
+import { translate } from '../src/i18n'
+
+const tz = (k: Parameters<typeof translate>[1], v?: Record<string, string | number>) => translate('zh', k, v)
+const te = (k: Parameters<typeof translate>[1], v?: Record<string, string | number>) => translate('en', k, v)
 
 const bolt = (position: string, material = '316-TW'): Bolt => ({ position, material, tests: [] })
 const route = (over: Partial<Route>): Route => ({
@@ -15,7 +19,8 @@ describe('quickdraws', () => {
       anchors: [bolt('A01', 'Ti-U'), bolt('A02', 'Ti-U')],
     })
     expect(quickdraws(r)).toBe(18)
-    expect(typeText(r)).toBe('18快扣 運攀')
+    expect(typeText(r, tz)).toBe('18快扣 運攀')
+    expect(typeText(r, te)).toBe('18 draws Sport')
   })
 
   it('無 Anchor、天然固定點不算', () => {
@@ -24,9 +29,9 @@ describe('quickdraws', () => {
   })
 
   it('非運攀或沒有 bolt 時不顯示快扣數', () => {
-    expect(typeText(route({ type: 'trad', anchors: [bolt('A01')] }))).toBe('傳攀')
-    expect(typeText(route({ type: 'sport' }))).toBe('運攀')
-    expect(typeText(route({ isFixture: true }))).toBe('固定點')
+    expect(typeText(route({ type: 'trad', anchors: [bolt('A01')] }), tz)).toBe('傳攀')
+    expect(typeText(route({ type: 'sport' }), tz)).toBe('運攀')
+    expect(typeText(route({ isFixture: true }), tz)).toBe('固定點')
   })
 })
 
@@ -63,10 +68,10 @@ import { sectorColor, typeSummary } from '../src/format'
 describe('typeSummary', () => {
   it('簡化為運攀與傳攀/其他，固定點不計', () => {
     expect(
-      typeSummary([{ type: 'sport' }, { type: 'sport' }, { type: 'trad' }, { type: 'boulder' }, { type: 'toprope' }, { isFixture: true }]),
+      typeSummary([{ type: 'sport' }, { type: 'sport' }, { type: 'trad' }, { type: 'boulder' }, { type: 'toprope' }, { isFixture: true }], tz),
     ).toBe('運攀 2 · 傳攀/其他 3')
-    expect(typeSummary([{ type: 'trad' }])).toBe('傳攀/其他 1')
-    expect(typeSummary([])).toBe('')
+    expect(typeSummary([{ type: 'trad' }], te)).toBe('Trad/other 1')
+    expect(typeSummary([], tz)).toBe('')
   })
 })
 

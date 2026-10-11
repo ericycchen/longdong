@@ -1,21 +1,21 @@
+import type { Translate } from './i18n'
 import type { Route, RouteStatus, RouteType } from './data/schema'
 
-export const TYPE_LABEL: Record<RouteType, string> = {
-  sport: '運攀',
-  trad: '傳攀',
-  toprope: '上方架繩',
-  boulder: '抱石',
-  mixed: '混合',
+/** 狀態的顏色語意；文字見 i18n 的 status.* */
+export const STATUS_TONE: Record<RouteStatus, 'ok' | 'warn' | 'danger' | 'muted'> = {
+  tested: 'ok',
+  rebolted: 'ok',
+  'needs-test': 'warn',
+  'needs-rebolt': 'warn',
+  closed: 'danger',
+  'to-remove': 'danger',
+  unknown: 'muted',
 }
 
-export const STATUS_INFO: Record<RouteStatus, { label: string; tone: 'ok' | 'warn' | 'danger' | 'muted' }> = {
-  tested: { label: '已拉測', tone: 'ok' },
-  rebolted: { label: '已更新', tone: 'ok' },
-  'needs-test': { label: '待拉測', tone: 'warn' },
-  'needs-rebolt': { label: '待更新', tone: 'warn' },
-  closed: { label: '路線封閉', tone: 'danger' },
-  'to-remove': { label: '待移除', tone: 'danger' },
-  unknown: { label: '待查', tone: 'muted' },
+export const ROUTE_TYPES: RouteType[] = ['sport', 'trad', 'toprope', 'boulder', 'mixed']
+
+export function typeLabel(type: RouteType, t: Translate): string {
+  return t(`type.${type}`)
 }
 
 const NOT_A_BOLT = new Set(['無 Anchor', 'No Anchor', '天然固定點'])
@@ -30,12 +30,13 @@ export function quickdraws(route: Route): number | undefined {
   return n > 0 ? n : undefined
 }
 
-/** 路線種類的顯示文字，運攀前面加上快扣數，例如「18快扣 運攀」 */
-export function typeText(route: Route): string {
-  if (route.isFixture) return '固定點'
+/** 路線種類的顯示文字，運攀前面加上快扣數，例如「18快扣 運攀」／「18 draws Sport」 */
+export function typeText(route: Route, t: Translate): string {
+  if (route.isFixture) return t('type.fixture')
   if (!route.type) return ''
   const qd = quickdraws(route)
-  return qd ? `${qd}快扣 ${TYPE_LABEL[route.type]}` : TYPE_LABEL[route.type]
+  const label = typeLabel(route.type, t)
+  return qd ? `${t('type.quickdraws', { n: qd })} ${label}` : label
 }
 
 /** "2025-12-04" → "2025/12/04"；部分日期照樣顯示 */
@@ -53,13 +54,13 @@ export function yearsSince(d: string | undefined, now = new Date()): number | un
   return Math.max(0, years)
 }
 
-export function relativeTime(iso: string, now = new Date()): string {
+export function relativeTime(iso: string, t: Translate, now = new Date()): string {
   const days = Math.floor((now.getTime() - new Date(iso).getTime()) / 86400000)
-  if (days < 1) return '今天'
-  if (days < 2) return '昨天'
-  if (days < 31) return `${days} 天前`
-  if (days < 365) return `${Math.floor(days / 30)} 個月前`
-  return `${Math.floor(days / 365)} 年前`
+  if (days < 1) return t('time.today')
+  if (days < 2) return t('time.yesterday')
+  if (days < 31) return t('time.daysAgo', { n: days })
+  if (days < 365) return t('time.monthsAgo', { n: Math.floor(days / 30) })
+  return t('time.yearsAgo', { n: Math.floor(days / 365) })
 }
 
 export type GradeBand = 'easy' | 'g10' | 'g11' | 'g12' | 'g13'
@@ -93,7 +94,7 @@ export function gradeDistribution(routes: { gradeValue?: number }[]): { band: Gr
 }
 
 /** 路線類型簡化為兩類：「運攀 10 · 傳攀/其他 5」（為 0 的不顯示） */
-export function typeSummary(routes: { type?: RouteType; isFixture?: boolean }[]): string {
+export function typeSummary(routes: { type?: RouteType; isFixture?: boolean }[], t: Translate): string {
   let sport = 0
   let other = 0
   for (const r of routes) {
@@ -101,7 +102,7 @@ export function typeSummary(routes: { type?: RouteType; isFixture?: boolean }[])
     if (r.type === 'sport') sport++
     else other++
   }
-  return [sport && `運攀 ${sport}`, other && `傳攀/其他 ${other}`].filter(Boolean).join(' · ')
+  return [sport && `${t('type.sport')} ${sport}`, other && `${t('type.tradOther')} ${other}`].filter(Boolean).join(' · ')
 }
 
 /**

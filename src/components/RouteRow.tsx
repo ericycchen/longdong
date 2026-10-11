@@ -6,6 +6,7 @@ import { useCloud } from '../personal/sync'
 import { routeKey, summarize } from '../social/model'
 import { useSocial } from '../social/store'
 import { href } from '../router'
+import { localName, useLang } from '../i18n'
 import { GradePill } from './GradePill'
 import { SafetyLight } from './SafetyLight'
 import { StarsBadge } from './Stars'
@@ -13,6 +14,8 @@ import { StatusBadge } from './StatusBadge'
 
 export function RouteRow({ item, showPlace = false }: { item: RouteRef; showPlace?: boolean }) {
   const { route, sector, area } = item
+  const { lang, t } = useLang()
+  const name = localName(route.name, lang)
   const personal = usePersonal()
   const signedIn = useCloud().status === 'signed-in'
   const rating = summarize(useSocial().ratings[routeKey(route.id)])
@@ -25,18 +28,26 @@ export function RouteRow({ item, showPlace = false }: { item: RouteRef; showPlac
         <span className="route-no">{route.number ? `#${route.number}` : '—'}</span>
         <span className="route-name">
           <span className="zh">
-            {route.name.zh}
+            {name.main}
             {(favorite || sent) && (
               <span className="marks">
-                {sent && <span title="已完攀" aria-label="已完攀">✓</span>}
-                {favorite && <span title="已收藏" aria-label="已收藏">★</span>}
+                {sent && (
+                  <span title={t('mark.sent')} aria-label={t('mark.sent')}>
+                    ✓
+                  </span>
+                )}
+                {favorite && (
+                  <span title={t('mark.fav')} aria-label={t('mark.fav')}>
+                    ★
+                  </span>
+                )}
               </span>
             )}
           </span>
-          {route.name.en && <span className="en">{route.name.en}</span>}
+          {name.sub && <span className="en">{name.sub}</span>}
           {showPlace && (
             <span className="place">
-              {area.name.zh} · {sector.name.zh}
+              {localName(area.name, lang).main} · {localName(sector.name, lang).main}
             </span>
           )}
         </span>
@@ -45,7 +56,7 @@ export function RouteRow({ item, showPlace = false }: { item: RouteRef; showPlac
             {!route.isFixture && <SafetyLight safety={route.safety} />}
             <GradePill grade={route.grade} value={route.gradeValue} />
           </span>
-          <span className="type">{typeText(route)}</span>
+          <span className="type">{typeText(route, t)}</span>
           <span className="meta-line">
             <StarsBadge summary={rating} />
             {route.status && <StatusBadge status={route.status} compact />}

@@ -3,9 +3,10 @@ import type { LoadedData } from '../data/dataset'
 import { RouteRow } from '../components/RouteRow'
 import { href } from '../router'
 import { buildIndex, search } from '../search'
+import { useLang } from '../i18n'
 
 const MAX_RESULTS = 100
-const EXAMPLES = ['5.10a', '黃金谷', 'Olive Branch', '523']
+const EXAMPLES = { zh: ['5.10a', '黃金谷', 'Olive Branch', '523'], en: ['5.10a', 'Golden Valley', 'Olive Branch', '523'] }
 
 function readQuery(): string {
   const m = location.hash.match(/[?&]q=([^&]*)/)
@@ -13,6 +14,7 @@ function readQuery(): string {
 }
 
 export function SearchPage({ data }: { data: LoadedData }) {
+  const { lang, t } = useLang()
   const [query, setQuery] = useState(readQuery)
   const input = useRef<HTMLInputElement>(null)
   const index = useMemo(() => buildIndex(data.routes), [data])
@@ -40,8 +42,8 @@ export function SearchPage({ data }: { data: LoadedData }) {
           ref={input}
           type="search"
           inputMode="search"
-          placeholder="路線名稱、編號、難度、首攀者…"
-          aria-label="搜尋路線"
+          placeholder={t('search.placeholder')}
+          aria-label={t('search.aria')}
           value={query}
           onChange={(e) => onChange(e.target.value)}
         />
@@ -51,8 +53,8 @@ export function SearchPage({ data }: { data: LoadedData }) {
         <section>
           <p className="muted small">
             {results.length === 0
-              ? '找不到符合的路線'
-              : `${results.length} 條結果${results.length > MAX_RESULTS ? `，顯示前 ${MAX_RESULTS} 條` : ''}`}
+              ? t('search.none')
+              : t('search.results', { n: results.length }) + (results.length > MAX_RESULTS ? t('search.limited', { max: MAX_RESULTS }) : '')}
           </p>
           <ul className="route-list">
             {results.slice(0, MAX_RESULTS).map((item) => (
@@ -62,9 +64,9 @@ export function SearchPage({ data }: { data: LoadedData }) {
         </section>
       ) : (
         <div className="search-hints">
-          <p className="muted small">試試看：</p>
+          <p className="muted small">{t('search.try')}</p>
           <div className="chips">
-            {EXAMPLES.map((q) => (
+            {EXAMPLES[lang].map((q) => (
               <button key={q} className="chip" onClick={() => onChange(q)}>
                 {q}
               </button>

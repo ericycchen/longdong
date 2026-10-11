@@ -3,6 +3,7 @@ import { useRegisterSW } from 'virtual:pwa-register/react'
 import { BottomNav } from './components/BottomNav'
 import { useData } from './data/dataset'
 import { relativeTime } from './format'
+import { useLang } from './i18n'
 import { AboutPage } from './pages/AboutPage'
 import { AreaPage, SectorPage } from './pages/AreaPage'
 import { HomePage } from './pages/HomePage'
@@ -15,6 +16,7 @@ import { href, usePage } from './router'
 export function App() {
   const page = usePage()
   const state = useData()
+  const { t } = useLang()
   const {
     offlineReady: [offlineReady],
     needRefresh: [needRefresh],
@@ -33,23 +35,23 @@ export function App() {
           <span className="brand-mark" aria-hidden>
             LD
           </span>
-          龍洞攀岩資料庫
+          {t('app.title')}
         </a>
       </header>
 
       {needRefresh && (
         <div className="banner">
-          有新版本的路線資料
-          <button onClick={() => updateServiceWorker(true)}>更新</button>
+          {t('app.updateAvailable')}
+          <button onClick={() => updateServiceWorker(true)}>{t('app.update')}</button>
         </div>
       )}
 
       <main>
-        {state.status === 'loading' && <p className="empty muted">載入中…</p>}
+        {state.status === 'loading' && <p className="empty muted">{t('app.loading')}</p>}
         {state.status === 'error' && (
           <div className="empty">
-            <p>無法載入路線資料（{state.error}）。</p>
-            <p className="muted small">第一次使用需要網路連線，下載完成後即可離線使用。</p>
+            <p>{t('app.loadError', { error: state.error })}</p>
+            <p className="muted small">{t('app.firstUseNeedsNetwork')}</p>
           </div>
         )}
         {state.status === 'ready' &&
@@ -72,15 +74,15 @@ export function App() {
 
       {state.status === 'ready' && page.name === 'home' && (
         <footer className="footer muted small">
-          資料更新於 {relativeTime(state.data.dataset.updatedAt)}
-          {offlineReady || navigator.serviceWorker?.controller ? ' · 已可離線使用' : ''}
+          {t('footer.updated', { time: relativeTime(state.data.dataset.updatedAt, t) })}
+          {offlineReady || navigator.serviceWorker?.controller ? ` · ${t('footer.offlineReady')}` : ''}
           <br />
-          資料來源：
+          {t('footer.source')}
           <a href={state.data.dataset.source.projectUrl} target="_blank" rel="noreferrer">
             {state.data.dataset.source.attribution}
           </a>
           <br />
-          僅供參考，攀登前請自行確認現場狀況 · <a href={href.about()}>關於與說明</a>
+          {t('footer.disclaimer')} · <a href={href.about()}>{t('footer.about')}</a>
         </footer>
       )}
 

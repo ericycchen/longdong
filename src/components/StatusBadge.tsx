@@ -1,12 +1,14 @@
 import type { RouteStatus } from '../data/schema'
-import { STATUS_INFO } from '../format'
+import { STATUS_TONE } from '../format'
+import { useLang } from '../i18n'
 
 export function StatusBadge({ status, compact = false }: { status: RouteStatus; compact?: boolean }) {
-  const info = STATUS_INFO[status]
+  const { t } = useLang()
+  const label = t(`status.${status}`)
   return (
-    <span className={`badge tone-${info.tone}${compact ? ' compact' : ''}`} title={info.label}>
+    <span className={`badge tone-${STATUS_TONE[status]}${compact ? ' compact' : ''}`} title={label}>
       <span className="dot" aria-hidden />
-      {info.label}
+      {label}
     </span>
   )
 }

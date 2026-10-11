@@ -15,13 +15,9 @@ export function routeKey(routeId: string): string {
 
 export type Feel = 'soft' | 'fair' | 'hard'
 
-export const FEELS: { value: Feel; label: string }[] = [
-  { value: 'soft', label: '偏軟' },
-  { value: 'fair', label: '剛好' },
-  { value: 'hard', label: '偏硬' },
-]
+/** 體感難度；顯示文字見 i18n 的 feel.* */
+export const FEELS: Feel[] = ['soft', 'fair', 'hard']
 
-export const FEEL_LABEL = Object.fromEntries(FEELS.map((f) => [f.value, f.label])) as Record<Feel, string>
 
 export interface Rating {
   stars: number

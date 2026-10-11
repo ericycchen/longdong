@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { favoritePath, reconcile, tickPath, clean, type RemotePersonal } from './reconcile'
 import { applyRecords, clearAll, exportAll, onLocalWrite } from './store'
 import { setLocalProfile } from '../social/store'
+import { t } from '../i18n'
 
 /**
  * 雲端同步：登入 Google 後，收藏與攀登紀錄自動同步到 Firebase（/v2/personal/<uid>）。
@@ -71,7 +72,7 @@ function load(): Promise<FirebaseModule> {
   })
   fb.catch((err: Error) => {
     fb = undefined
-    set({ status: 'off', error: `無法載入登入功能（${err.message}）` })
+    set({ status: 'off', error: t('sync.loadFailed', { error: err.message }) })
   })
   return fb
 }
@@ -92,14 +93,17 @@ export async function signIn(provider: ProviderName = 'google'): Promise<void> {
     storage.set(ENABLED_KEY, '1')
     await m.signInWith(provider, (email, existing) =>
       confirm(
-        `${email || '這個 Email'} 已經用 ${PROVIDER_LABEL[existing]} 登入過。\n` +
-          `接下來請用 ${PROVIDER_LABEL[existing]} 登入一次，之後 ${PROVIDER_LABEL[provider]} 和 ${PROVIDER_LABEL[existing]} 都能登入同一個帳號。`,
+        t('signin.linkConfirm', {
+          email: email || t('signin.thisEmail'),
+          existing: PROVIDER_LABEL[existing],
+          provider: PROVIDER_LABEL[provider],
+        }),
       ),
     )
   } catch (err) {
     const code = (err as { code?: string }).code
     if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return
-    set({ error: `登入失敗（${code ?? (err as Error).message}）` })
+    set({ error: t('signin.failed', { error: code ?? (err as Error).message }) })
   }
 }
 
@@ -129,7 +133,7 @@ export async function deleteAccount(paths: Record<string, null>): Promise<void> 
 
 /** 已登入時回傳 Firebase 模組與 uid，給評分、留言等寫入功能使用 */
 export async function withCloud(): Promise<{ m: FirebaseModule; uid: string }> {
-  if (state.status !== 'signed-in' || !state.user || !fb) throw new Error('請先登入')
+  if (state.status !== 'signed-in' || !state.user || !fb) throw new Error(t('sync.needSignIn'))
   return { m: await fb, uid: state.user.uid }
 }
 
@@ -157,7 +161,7 @@ async function onUser(m: FirebaseModule, user: import('./firebase').User | null)
   stopRemote = m.watchRemote(
     user.uid,
     (value) => void sync(m, user.uid, value as RemotePersonal | null),
-    (err) => set({ syncing: false, error: `同步失敗（${err.message}）` }),
+    (err) => set({ syncing: false, error: t('sync.failed', { error: err.message }) }),
   )
 }
 
@@ -171,7 +175,7 @@ async function sync(m: FirebaseModule, uid: string, remote: RemotePersonal | nul
     if (Object.keys(toRemote).length) await m.writeRemote(toRemote)
     set({ syncing: false, lastSync: new Date().toISOString(), error: undefined })
   } catch (err) {
-    set({ syncing: false, error: `同步失敗（${(err as Error).message}）` })
+    set({ syncing: false, error: t('sync.failed', { error: (err as Error).message }) })
   }
 }
 
@@ -184,5 +188,5 @@ async function push(w: { favorite: import('./model').Favorite } | { tick: import
     'favorite' in w
       ? { [favoritePath(uid, w.favorite.routeId)]: clean(w.favorite) }
       : { [tickPath(uid, w.tick.id)]: clean(w.tick) }
-  m.writeRemote(paths).catch((err: Error) => set({ error: `同步失敗（${err.message}）` }))
+  m.writeRemote(paths).catch((err: Error) => set({ error: t('sync.failed', { error: err.message }) }))
 }

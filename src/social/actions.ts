@@ -1,5 +1,6 @@
 import { deleteAccount, withCloud } from '../personal/sync'
 import { COMMENT_MAX, NAME_MAX, type Comment, type Feel, type Rating } from './model'
+import { t } from '../i18n'
 import { get, loadComments, loadRatings, setLocalProfile, setLocalRating } from './store'
 
 /** 評分；rating 為 null 時刪除自己的評分 */
@@ -13,7 +14,7 @@ export async function rate(routeId: string, input: { stars: number; feel?: Feel 
 export async function postComment(routeId: string, text: string): Promise<void> {
   const body = text.trim()
   if (!body) return
-  if (body.length > COMMENT_MAX) throw new Error(`留言最多 ${COMMENT_MAX} 字`)
+  if (body.length > COMMENT_MAX) throw new Error(t('comments.tooLong', { n: COMMENT_MAX }))
   const { m, uid } = await withCloud()
   await m.addComment(uid, routeId, body)
   await loadComments(routeId)
@@ -32,8 +33,8 @@ export async function report(routeId: string, id: string, reason: string): Promi
 
 export async function rename(name: string): Promise<void> {
   const value = name.trim()
-  if (!value) throw new Error('暱稱不能空白')
-  if (value.length > NAME_MAX) throw new Error(`暱稱最多 ${NAME_MAX} 字`)
+  if (!value) throw new Error(t('name.empty'))
+  if (value.length > NAME_MAX) throw new Error(t('name.tooLong', { n: NAME_MAX }))
   const { m, uid } = await withCloud()
   await m.saveProfile(uid, value)
   setLocalProfile(uid, { name: value, updatedAt: new Date().toISOString() })

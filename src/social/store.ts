@@ -1,4 +1,5 @@
 import { useEffect, useSyncExternalStore } from 'react'
+import { t } from '../i18n'
 import { DB_URL, routeKey, type Comment, type Profile, type Rating } from './model'
 
 /**
@@ -92,5 +93,5 @@ export function setLocalProfile(uid: string, profile: Profile) {
 }
 
 export function displayName(profiles: Record<string, Profile>, uid: string): string {
-  return profiles[uid]?.name || '岩友'
+  return profiles[uid]?.name || t('name.default')
 }

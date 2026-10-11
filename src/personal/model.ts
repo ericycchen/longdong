@@ -7,16 +7,16 @@
 
 export type TickStyle = 'onsight' | 'flash' | 'redpoint' | 'follow' | 'toprope' | 'attempt'
 
-export const TICK_STYLES: { value: TickStyle; label: string; sent: boolean }[] = [
-  { value: 'onsight', label: 'Onsight', sent: true },
-  { value: 'flash', label: 'Flash', sent: true },
-  { value: 'redpoint', label: 'Redpoint', sent: true },
-  { value: 'follow', label: '跟攀', sent: true },
-  { value: 'toprope', label: '上方確保', sent: true },
-  { value: 'attempt', label: '嘗試', sent: false },
+/** 攀登方式；顯示文字見 i18n 的 style.* */
+export const TICK_STYLES: { value: TickStyle; sent: boolean }[] = [
+  { value: 'onsight', sent: true },
+  { value: 'flash', sent: true },
+  { value: 'redpoint', sent: true },
+  { value: 'follow', sent: true },
+  { value: 'toprope', sent: true },
+  { value: 'attempt', sent: false },
 ]
 
-export const TICK_STYLE_LABEL = Object.fromEntries(TICK_STYLES.map((s) => [s.value, s.label])) as Record<TickStyle, string>
 
 export function isSent(style: TickStyle): boolean {
   return TICK_STYLES.find((s) => s.value === style)?.sent ?? false

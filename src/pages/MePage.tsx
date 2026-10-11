@@ -5,7 +5,8 @@ import { GradePill } from '../components/GradePill'
 import { RouteRow } from '../components/RouteRow'
 import { FACEBOOK_LOGIN_ENABLED, SignInPrompt } from '../components/SignInPrompt'
 import { relativeTime } from '../format'
-import { TICK_STYLE_LABEL, isSent } from '../personal/model'
+import { localName, monthTitle, setLangSetting, useLang, type LangSetting } from '../i18n'
+import { isSent } from '../personal/model'
 import { gradePyramid, groupByMonth, monthlyCounts } from '../personal/stats'
 import { deleteTick, setFavorite, usePersonal } from '../personal/store'
 import { signOut, useCloud } from '../personal/sync'
@@ -18,39 +19,36 @@ type Tab = 'ticks' | 'favorites'
 
 export function MePage({ data }: { data: LoadedData }) {
   const cloud = useCloud()
+  const { t } = useLang()
 
   if (cloud.status === 'signed-in' && cloud.user) {
     return <SignedIn data={data} uid={cloud.user.uid} email={cloud.user.email} />
   }
-  if (cloud.status === 'loading') return <p className="empty muted">載入中…</p>
+  if (cloud.status === 'loading') return <p className="empty muted">{t('app.loading')}</p>
 
   return (
     <>
-      <h1>我的</h1>
+      <h1>{t('me.title')}</h1>
       <section className="card intro-card">
-        <h2>記錄你的龍洞攀登</h2>
+        <h2>{t('me.introTitle')}</h2>
         <ul className="feature-list">
-          <li>
-            <strong>攀登紀錄</strong>
-            <span>日期、Onsight／Flash／Redpoint、心得，自動統計難度金字塔</span>
-          </li>
-          <li>
-            <strong>收藏</strong>
-            <span>把想爬的路線存起來</span>
-          </li>
-          <li>
-            <strong>評分與留言</strong>
-            <span>分享 beta、現場狀況、岩質或 bolt 問題</span>
-          </li>
-          <li>
-            <strong>跨裝置同步</strong>
-            <span>手機和電腦自動同步，沒網路也能記錄</span>
-          </li>
+          {(['log', 'fav', 'social', 'sync'] as const).map((f) => (
+            <li key={f}>
+              <strong>{t(`me.feature.${f}`)}</strong>
+              <span>{t(`me.feature.${f}Desc`)}</span>
+            </li>
+          ))}
         </ul>
-        <SignInPrompt message={`用 Google${FACEBOOK_LOGIN_ENABLED ? ' 或 Facebook' : ''} 帳號登入，Email 不會公開。`} />
+        <SignInPrompt
+          message={t('me.signInMessage', { providers: FACEBOOK_LOGIN_ENABLED ? `Google${t('me.or')}Facebook` : 'Google' })}
+        />
+      </section>
+      {/* 語言設定不需要登入 */}
+      <section className="card">
+        <LanguagePicker />
       </section>
       <p className="center small">
-        <a href={href.about()}>關於與說明</a>
+        <a href={href.about()}>{t('footer.about')}</a>
       </p>
     </>
   )
@@ -60,12 +58,13 @@ function SignedIn({ data, uid, email }: { data: LoadedData; uid: string; email: 
   const personal = usePersonal()
   const cloud = useCloud()
   const social = useSocial()
+  const { lang, t } = useLang()
   const [tab, setTab] = useState<Tab>('ticks')
   const [settings, setSettings] = useState(false)
 
   const lookup = (id: string) => data.routeById.get(id)
   const name = displayName(social.profiles, uid)
-  const sentRoutes = new Set(personal.ticks.filter((t) => isSent(t.style)).map((t) => t.routeId))
+  const sentRoutes = new Set(personal.ticks.filter((tick) => isSent(tick.style)).map((tick) => tick.routeId))
   const pyramid = gradePyramid(personal.ticks, (id) => lookup(id)?.route)
   const hardest = pyramid[0]
 
@@ -79,17 +78,17 @@ function SignedIn({ data, uid, email }: { data: LoadedData; uid: string; email: 
           <h1>{name}</h1>
           <p className="muted small">
             {cloud.syncing
-              ? '同步中…'
+              ? t('me.syncing')
               : !cloud.connected
-                ? '離線中・恢復連線後自動同步'
+                ? t('me.offline')
                 : cloud.lastSync
-                  ? `已同步・${relativeTime(cloud.lastSync)}`
-                  : '已連線'}
+                  ? t('me.synced', { time: relativeTime(cloud.lastSync, t) })
+                  : t('me.connected')}
           </p>
         </div>
         <button
           className={`icon-button${settings ? ' on' : ''}`}
-          aria-label="帳號設定"
+          aria-label={t('me.settings')}
           aria-expanded={settings}
           onClick={() => setSettings((s) => !s)}
         >
@@ -109,67 +108,70 @@ function SignedIn({ data, uid, email }: { data: LoadedData; uid: string; email: 
       <section className="stat-row">
         <div>
           <strong>{sentRoutes.size}</strong>
-          <span>完攀路線</span>
+          <span>{t('me.stat.sent')}</span>
         </div>
         <div>
           <strong>{personal.ticks.length}</strong>
-          <span>攀登紀錄</span>
+          <span>{t('me.stat.ticks')}</span>
         </div>
         <div>
           <strong>{hardest?.grade ?? '—'}</strong>
-          <span>最難完攀</span>
+          <span>{t('me.stat.hardest')}</span>
         </div>
       </section>
 
       <section className="card">
-        <h2>難度金字塔</h2>
+        <h2>{t('me.pyramid')}</h2>
         <GradePyramid rows={pyramid} />
       </section>
 
       <section className="card">
-        <h2>近 12 個月</h2>
+        <h2>{t('me.months')}</h2>
         <MonthlyChart months={monthlyCounts(personal.ticks)} />
       </section>
 
       <div className="segmented" role="tablist">
         <button role="tab" aria-selected={tab === 'ticks'} onClick={() => setTab('ticks')}>
-          攀登紀錄
+          {t('me.tab.ticks')}
         </button>
         <button role="tab" aria-selected={tab === 'favorites'} onClick={() => setTab('favorites')}>
-          收藏{personal.favorites.size > 0 && ` ${personal.favorites.size}`}
+          {t('me.tab.favs')}
+          {personal.favorites.size > 0 && ` ${personal.favorites.size}`}
         </button>
       </div>
 
       {tab === 'ticks' &&
         (personal.ticks.length === 0 ? (
-          <p className="empty muted">還沒有攀登紀錄。在路線頁按「記錄攀登」就會出現在這裡。</p>
+          <p className="empty muted">{t('me.noTicks')}</p>
         ) : (
           groupByMonth(personal.ticks).map((g) => (
             <section key={g.key} className="timeline">
-              <h3>{g.label}</h3>
+              <h3>{monthTitle(g.key, lang)}</h3>
               <ul className="list-card">
-                {g.ticks.map((t) => {
-                  const r = lookup(t.routeId)?.route
+                {g.ticks.map((tick) => {
+                  const r = lookup(tick.routeId)?.route
                   return (
-                    <li key={t.id} className="timeline-item">
+                    <li key={tick.id} className="timeline-item">
                       <span className="timeline-day">
-                        <strong>{Number(t.date.slice(8, 10))}</strong>
-                        <span>日</span>
+                        <strong>{Number(tick.date.slice(8, 10))}</strong>
+                        {t('me.dayUnit') && <span>{t('me.dayUnit')}</span>}
                       </span>
-                      <a className="timeline-body" href={href.route(t.routeId)}>
+                      <a className="timeline-body" href={href.route(tick.routeId)}>
                         <span className="timeline-title">
-                          {r ? `${r.number ? `#${r.number} ` : ''}${r.name.zh}` : `找不到路線（${t.routeId}）`}
+                          {r
+                            ? `${r.number ? `#${r.number} ` : ''}${localName(r.name, lang).main}`
+                            : t('me.routeMissing', { id: tick.routeId })}
                         </span>
                         <span className="timeline-meta">
-                          <span className={`style-tag style-${t.style}`}>{TICK_STYLE_LABEL[t.style]}</span>
-                          {t.note && <span className="muted">{t.note}</span>}
+                          <span className={`style-tag style-${tick.style}`}>{t(`style.${tick.style}`)}</span>
+                          {tick.note && <span className="muted">{tick.note}</span>}
                         </span>
                       </a>
                       <GradePill grade={r?.grade} value={r?.gradeValue} size="sm" />
                       <button
                         className="icon-button small"
-                        aria-label="刪除這筆紀錄"
-                        onClick={() => confirm('刪除這筆攀登紀錄？') && deleteTick(t.id)}
+                        aria-label={t('tick.deleteAria')}
+                        onClick={() => confirm(t('tick.confirmDelete')) && deleteTick(tick.id)}
                       >
                         ×
                       </button>
@@ -183,7 +185,7 @@ function SignedIn({ data, uid, email }: { data: LoadedData; uid: string; email: 
 
       {tab === 'favorites' &&
         (personal.favorites.size === 0 ? (
-          <p className="empty muted">還沒有收藏。在路線頁按「收藏」就會出現在這裡。</p>
+          <p className="empty muted">{t('me.noFavs')}</p>
         ) : (
           <ul className="list-card">
             {[...personal.favorites].map((id) => {
@@ -192,8 +194,8 @@ function SignedIn({ data, uid, email }: { data: LoadedData; uid: string; email: 
                 <RouteRow key={id} item={ref} showPlace />
               ) : (
                 <li key={id} className="timeline-item">
-                  <span className="timeline-body muted small">找不到路線（{id}）</span>
-                  <button className="icon-button small" aria-label="移除收藏" onClick={() => setFavorite(id, false)}>
+                  <span className="timeline-body muted small">{t('me.routeMissing', { id })}</span>
+                  <button className="icon-button small" aria-label={t('me.removeFav')} onClick={() => setFavorite(id, false)}>
                     ×
                   </button>
                 </li>
@@ -206,17 +208,16 @@ function SignedIn({ data, uid, email }: { data: LoadedData; uid: string; email: 
 }
 
 function Settings({ uid, email }: { uid: string; email: string }) {
+  const { t } = useLang()
   return (
     <section className="card settings">
       <NameEditor uid={uid} />
-      <p className="muted small">{email}（不公開）</p>
+      <p className="muted small">{t('me.emailPrivate', { email })}</p>
+      <LanguagePicker />
       <div className="settings-links">
-        <a href={href.about()}>關於與說明</a>
-        <button
-          className="link-button"
-          onClick={() => confirm('登出？這台裝置上的紀錄會清除，下次登入會從雲端載入。') && void signOut()}
-        >
-          登出
+        <a href={href.about()}>{t('footer.about')}</a>
+        <button className="link-button" onClick={() => confirm(t('me.confirmSignOut')) && void signOut()}>
+          {t('me.signOut')}
         </button>
       </div>
       <DeleteAccount />
@@ -224,8 +225,24 @@ function Settings({ uid, email }: { uid: string; email: string }) {
   )
 }
 
+/** 語言：自動（依系統語言）、中文、English；選擇存在這台裝置上 */
+function LanguagePicker() {
+  const { setting, t } = useLang()
+  return (
+    <label className="lang-picker">
+      <span>{t('me.language')}</span>
+      <select value={setting} onChange={(e) => setLangSetting(e.target.value as LangSetting)}>
+        <option value="auto">{t('lang.auto')}</option>
+        <option value="zh">{t('lang.zh')}</option>
+        <option value="en">{t('lang.en')}</option>
+      </select>
+    </label>
+  )
+}
+
 function NameEditor({ uid }: { uid: string }) {
   const social = useSocial()
+  const { t } = useLang()
   const [value, setValue] = useState(() => displayName(social.profiles, uid))
   const [state, setState] = useState<{ busy?: boolean; error?: string; saved?: boolean }>({})
   return (
@@ -244,12 +261,12 @@ function NameEditor({ uid }: { uid: string }) {
     >
       <label>
         <span>
-          暱稱 <span className="muted small">留言和評分會顯示</span>
+          {t('me.nickname')} <span className="muted small">{t('me.nicknameHint')}</span>
         </span>
         <span className="name-row">
           <input value={value} maxLength={NAME_MAX} onChange={(e) => setValue(e.target.value)} />
           <button type="submit" className="action primary" disabled={state.busy}>
-            {state.saved ? '已儲存' : '儲存'}
+            {state.saved ? t('action.saved') : t('action.save')}
           </button>
         </span>
       </label>
@@ -259,31 +276,32 @@ function NameEditor({ uid }: { uid: string }) {
 }
 
 function DeleteAccount() {
+  const { t } = useLang()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
   const run = async () => {
     if (!navigator.onLine) {
-      setError('需要網路才能刪除帳號')
+      setError(t('me.deleteOffline'))
       return
     }
-    if (!confirm('確定要刪除帳號？你的攀登紀錄、收藏、評分、留言和暱稱都會永久刪除，無法復原。')) return
+    if (!confirm(t('me.deleteConfirm'))) return
     setBusy(true)
     setError(undefined)
     try {
       await deleteMyAccount()
-      alert('帳號和資料已刪除。')
+      alert(t('me.deleted'))
     } catch (err) {
-      setError(`刪除失敗（${(err as { code?: string }).code ?? (err as Error).message}）`)
+      setError(t('me.deleteError', { error: (err as { code?: string }).code ?? (err as Error).message }))
     } finally {
       setBusy(false)
     }
   }
   return (
     <details className="danger-zone">
-      <summary>刪除帳號</summary>
-      <p className="muted small">永久刪除你的攀登紀錄、收藏、評分、留言和暱稱，以及登入帳號。</p>
+      <summary>{t('me.deleteAccount')}</summary>
+      <p className="muted small">{t('me.deleteDesc')}</p>
       <button className="action danger" onClick={() => void run()} disabled={busy}>
-        {busy ? '刪除中…' : '刪除我的帳號與所有資料'}
+        {busy ? t('me.deleting') : t('me.deleteButton')}
       </button>
       {error && <p className="small error">{error}</p>}
     </details>

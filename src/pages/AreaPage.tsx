@@ -1,27 +1,25 @@
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import type { LoadedData } from '../data/dataset'
-import type { CSSProperties } from 'react'
-import type { Area, Route, RouteType, Sector } from '../data/schema'
+import type { Area, LocalizedName, Route, RouteType, Sector } from '../data/schema'
 import { GradeDistribution } from '../components/Charts'
 import { RouteRow } from '../components/RouteRow'
-import { TYPE_LABEL, gradeDistribution, sectorColor, typeSummary } from '../format'
+import { ROUTE_TYPES, gradeDistribution, sectorColor, typeLabel, typeSummary } from '../format'
+import { localName, useLang } from '../i18n'
 import { href } from '../router'
 
 /** 區域頁：列出分區，點進去才看路線（只有一個分區時直接顯示路線） */
 export function AreaPage({ data, id }: { data: LoadedData; id: string }) {
+  const { t } = useLang()
   const area = data.areaById.get(id)
   if (!area) return <NotFound />
   const routeCount = area.sectors.reduce((n, s) => n + s.routes.filter((r) => !r.isFixture).length, 0)
 
   return (
     <>
-      <h1>
-        <ColorDot color={area.color} />
-        {area.name.zh} <span className="en">{area.name.en}</span>
-      </h1>
+      <Title name={area.name} color={area.color} />
       <p className="muted small page-sub">
-        {area.sectors.length > 1 ? `${area.sectors.length} 個分區・` : ''}
-        {routeCount} 條路線
+        {area.sectors.length > 1 && `${t('count.sectors', { n: area.sectors.length })} · `}
+        {t('count.routes', { n: routeCount })}
       </p>
 
       {area.notes.map((n) => (
@@ -46,26 +44,36 @@ export function AreaPage({ data, id }: { data: LoadedData; id: string }) {
 }
 
 function SectorCard({ sector, color }: { sector: Sector; color?: string }) {
+  const { lang, t } = useLang()
   const routes = sector.routes.filter((r) => !r.isFixture)
   const range = gradeRange(routes)
+  const name = localName(sector.name, lang)
   return (
     <a className="area-row" href={href.sector(sector.id)} style={{ '--area-color': color } as CSSProperties}>
       <span className="area-info">
-        <span className="sector-name">{sector.name.zh}</span>
-        {sector.name.en && <span className="en">{sector.name.en}</span>}
+        <span className="sector-name">{name.main}</span>
+        {name.sub && <span className="en">{name.sub}</span>}
         <span className="area-count">
-          {routes.length} 條{range && <span className="muted nowrap">・{range}</span>}
+          {t('count.routesShort', { n: routes.length })}
+          {range && <span className="muted nowrap"> · {range}</span>}
         </span>
-        <span className="area-types">{typeSummary(routes)}</span>
+        <span className="area-types">{typeSummary(routes, t)}</span>
       </span>
       <GradeDistribution bands={gradeDistribution(routes)} />
     </a>
   )
 }
 
-/** 區域與分區頁標題旁的識別色 */
-function ColorDot({ color }: { color?: string }) {
-  return color ? <span className="color-dot" style={{ background: color }} aria-hidden /> : null
+/** 區域、分區頁的標題：識別色圓點＋依語言排列的名稱 */
+function Title({ name, color }: { name: LocalizedName; color?: string }) {
+  const { lang } = useLang()
+  const n = localName(name, lang)
+  return (
+    <h1>
+      {color && <span className="color-dot" style={{ background: color }} aria-hidden />}
+      {n.main} {n.sub && <span className="en">{n.sub}</span>}
+    </h1>
+  )
 }
 
 export function areaSectorColor(area: Area, sector: Sector): string | undefined {
@@ -74,18 +82,16 @@ export function areaSectorColor(area: Area, sector: Sector): string | undefined 
 
 /** 分區頁：路線清單，可依種類篩選 */
 export function SectorPage({ data, id }: { data: LoadedData; id: string }) {
+  const { lang } = useLang()
   const found = data.sectorById.get(id)
   if (!found) return <NotFound />
   const { sector, area } = found
   return (
     <>
       <nav className="crumbs">
-        <a href={href.area(area.id)}>{area.name.zh}</a>
+        <a href={href.area(area.id)}>{localName(area.name, lang).main}</a>
       </nav>
-      <h1>
-        <ColorDot color={areaSectorColor(area, sector)} />
-        {sector.name.zh} <span className="en">{sector.name.en}</span>
-      </h1>
+      <Title name={sector.name} color={areaSectorColor(area, sector)} />
       <SectorRoutes data={data} sector={sector} />
     </>
   )
@@ -94,16 +100,17 @@ export function SectorPage({ data, id }: { data: LoadedData; id: string }) {
 type Filter = RouteType | 'all'
 
 function SectorRoutes({ data, sector }: { data: LoadedData; sector: Sector }) {
+  const { t } = useLang()
   const [filter, setFilter] = useState<Filter>('all')
-  const types = (Object.keys(TYPE_LABEL) as RouteType[]).filter((t) => sector.routes.some((r) => r.type === t))
+  const types = ROUTE_TYPES.filter((type) => sector.routes.some((r) => r.type === type))
   const routes = sector.routes.filter((r) => filter === 'all' || r.type === filter)
   return (
     <>
       {types.length > 1 && (
-        <div className="chips" role="group" aria-label="路線種類">
-          {(['all', ...types] as Filter[]).map((t) => (
-            <button key={t} className="chip" aria-pressed={filter === t} onClick={() => setFilter(t)}>
-              {t === 'all' ? '全部' : TYPE_LABEL[t]}
+        <div className="chips" role="group" aria-label={t('type.filter')}>
+          {(['all', ...types] as Filter[]).map((f) => (
+            <button key={f} className="chip" aria-pressed={filter === f} onClick={() => setFilter(f)}>
+              {f === 'all' ? t('type.all') : typeLabel(f, t)}
             </button>
           ))}
         </div>
@@ -128,10 +135,11 @@ function gradeRange(routes: Route[]): string | undefined {
 }
 
 export function NotFound() {
+  const { t } = useLang()
   return (
     <div className="empty">
-      <p>找不到這個頁面。</p>
-      <a href={href.home()}>回首頁</a>
+      <p>{t('app.notFound')}</p>
+      <a href={href.home()}>{t('app.backHome')}</a>
     </div>
   )
 }

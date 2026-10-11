@@ -25,7 +25,6 @@ export function gradePyramid(ticks: Tick[], lookup: (id: string) => Route | unde
 export interface MonthCount {
   /** YYYY-MM */
   key: string
-  label: string
   count: number
 }
 
@@ -35,7 +34,7 @@ export function monthlyCounts(ticks: Tick[], now = new Date()): MonthCount[] {
   for (let i = 11; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-    months.push({ key, label: `${d.getMonth() + 1}月`, count: 0 })
+    months.push({ key, count: 0 })
   }
   const index = new Map(months.map((m) => [m.key, m]))
   for (const t of ticks) {
@@ -45,15 +44,14 @@ export function monthlyCounts(ticks: Tick[], now = new Date()): MonthCount[] {
   return months
 }
 
-/** 依月份分組（新到舊），給時間軸用 */
-export function groupByMonth(ticks: Tick[]): { key: string; label: string; ticks: Tick[] }[] {
-  const groups: { key: string; label: string; ticks: Tick[] }[] = []
+/** 依月份（YYYY-MM）分組（新到舊），給時間軸用 */
+export function groupByMonth(ticks: Tick[]): { key: string; ticks: Tick[] }[] {
+  const groups: { key: string; ticks: Tick[] }[] = []
   for (const t of ticks) {
     const key = t.date.slice(0, 7)
     let g = groups[groups.length - 1]
     if (!g || g.key !== key) {
-      const [y, m] = key.split('-')
-      g = { key, label: `${y} 年 ${Number(m)} 月`, ticks: [] }
+      g = { key, ticks: [] }
       groups.push(g)
     }
     g.ticks.push(t)

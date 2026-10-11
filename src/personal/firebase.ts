@@ -155,7 +155,7 @@ export async function reportComment(uid: string, routeId: string, id: string, re
  */
 export async function deleteAccount(paths: Record<string, null>): Promise<void> {
   const user = auth.currentUser
-  if (!user) throw new Error('請先登入')
+  if (!user) throw new Error('not signed in')
   await update(ref(db), paths)
   try {
     await deleteUser(user)

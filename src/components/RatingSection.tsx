@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useCloud } from '../personal/sync'
 import { rate } from '../social/actions'
-import { FEELS, FEEL_LABEL, routeKey, summarize, type Feel } from '../social/model'
+import { useLang } from '../i18n'
+import { FEELS, routeKey, summarize, type Feel } from '../social/model'
 import { useSocial } from '../social/store'
 import { SignInPrompt } from './SignInPrompt'
 import { StarPicker } from './Stars'
@@ -9,6 +10,7 @@ import { StarPicker } from './Stars'
 export function RatingSection({ routeId }: { routeId: string }) {
   const social = useSocial()
   const cloud = useCloud()
+  const { t } = useLang()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
 
@@ -23,7 +25,7 @@ export function RatingSection({ routeId }: { routeId: string }) {
     try {
       await rate(routeId, { stars, ...(feel ? { feel } : {}) })
     } catch (err) {
-      setError(`無法儲存評分（${(err as Error).message}）`)
+      setError(t('rating.saveError', { error: (err as Error).message }))
     } finally {
       setBusy(false)
     }
@@ -34,7 +36,7 @@ export function RatingSection({ routeId }: { routeId: string }) {
     try {
       await rate(routeId, null)
     } catch (err) {
-      setError(`無法刪除評分（${(err as Error).message}）`)
+      setError(t('rating.deleteError', { error: (err as Error).message }))
     } finally {
       setBusy(false)
     }
@@ -42,7 +44,7 @@ export function RatingSection({ routeId }: { routeId: string }) {
 
   return (
     <section className="rating">
-      <h2>評分</h2>
+      <h2>{t('rating.title')}</h2>
       {summary ? (
         <div className="rating-summary">
           <div className="rating-average">
@@ -51,9 +53,9 @@ export function RatingSection({ routeId }: { routeId: string }) {
               {'★★★★★'.slice(0, Math.round(summary.average))}
               <span className="dim">{'★★★★★'.slice(Math.round(summary.average))}</span>
             </span>
-            <span className="muted small">{summary.count} 人評分</span>
+            <span className="muted small">{t('rating.count', { n: summary.count })}</span>
           </div>
-          <ul className="rating-bars" aria-label="各星等人數">
+          <ul className="rating-bars" aria-label={t('rating.barsAria')}>
             {[5, 4, 3, 2, 1].map((n) => (
               <li key={n}>
                 <span>{n}</span>
@@ -66,43 +68,43 @@ export function RatingSection({ routeId }: { routeId: string }) {
           </ul>
           {summary.feel.soft + summary.feel.fair + summary.feel.hard > 0 && (
             <p className="small">
-              體感難度：
-              {FEELS.map((f) => `${f.label} ${summary.feel[f.value]}`).join(' · ')}
+              {t('rating.feelSummary')}
+              {FEELS.map((f) => `${t(`feel.${f}`)} ${summary.feel[f]}`).join(' · ')}
             </p>
           )}
         </div>
       ) : (
-        <p className="muted small">{social.ratingsLoaded ? '還沒有人評分。' : '載入中…'}</p>
+        <p className="muted small">{social.ratingsLoaded ? t('rating.none') : t('app.loading')}</p>
       )}
 
       {cloud.status === 'signed-in' ? (
         <div className="my-rating">
-          <p className="small">{mine ? '你的評分（點選可修改）' : '你覺得這條路線如何？'}</p>
+          <p className="small">{mine ? t('rating.yours') : t('rating.ask')}</p>
           <StarPicker value={mine?.stars ?? 0} disabled={busy} onChange={(stars) => void save(stars, mine?.feel)} />
-          <div className="chips" role="group" aria-label="體感難度">
+          <div className="chips" role="group" aria-label={t('rating.feelAria')}>
             {FEELS.map((f) => (
               <button
-                key={f.value}
+                key={f}
                 className="chip"
-                aria-pressed={mine?.feel === f.value}
+                aria-pressed={mine?.feel === f}
                 disabled={busy || !mine}
-                title={mine ? undefined : '先選星等'}
-                onClick={() => mine && void save(mine.stars, mine.feel === f.value ? undefined : f.value)}
+                title={mine ? undefined : t('rating.starsFirst')}
+                onClick={() => mine && void save(mine.stars, mine.feel === f ? undefined : f)}
               >
-                {f.label}
+                {t(`feel.${f}`)}
               </button>
             ))}
           </div>
           {mine && (
             <button className="link-button" onClick={() => void clear()} disabled={busy}>
-              刪除我的評分
+              {t('rating.delete')}
             </button>
           )}
-          {mine?.feel && <p className="muted small">你覺得難度{FEEL_LABEL[mine.feel]}</p>}
+          {mine?.feel && <p className="muted small">{t('rating.youFeel', { feel: t(`feel.${mine.feel}`) })}</p>}
           {error && <p className="small error">{error}</p>}
         </div>
       ) : (
-        cloud.status !== 'loading' && <SignInPrompt message="登入後可以替路線評分。" />
+        cloud.status !== 'loading' && <SignInPrompt message={t('rating.signIn')} />
       )}
     </section>
   )

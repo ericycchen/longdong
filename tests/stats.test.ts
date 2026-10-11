@@ -31,17 +31,17 @@ describe('monthlyCounts', () => {
   it('最近 12 個月，含本月', () => {
     const m = monthlyCounts([tick('a', '2026-10-01'), tick('b', '2026-10-09'), tick('c', '2025-11-30'), tick('c', '2025-10-30')], new Date(2026, 9, 11))
     expect(m).toHaveLength(12)
-    expect(m[0]).toEqual({ key: '2025-11', label: '11月', count: 1 })
-    expect(m[11]).toEqual({ key: '2026-10', label: '10月', count: 2 })
+    expect(m[0]).toEqual({ key: '2025-11', count: 1 })
+    expect(m[11]).toEqual({ key: '2026-10', count: 2 })
   })
 })
 
 describe('groupByMonth', () => {
   it('依月份分組', () => {
     const g = groupByMonth([tick('a', '2026-10-09'), tick('b', '2026-10-01'), tick('c', '2026-09-30')])
-    expect(g.map((x) => [x.label, x.ticks.length])).toEqual([
-      ['2026 年 10 月', 2],
-      ['2026 年 9 月', 1],
+    expect(g.map((x) => [x.key, x.ticks.length])).toEqual([
+      ['2026-10', 2],
+      ['2026-09', 1],
     ])
   })
 })

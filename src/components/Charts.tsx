@@ -1,18 +1,20 @@
 import type { MonthCount, PyramidRow } from '../personal/stats'
 import type { GradeBand } from '../format'
+import { monthShort, useLang } from '../i18n'
 
 /**
  * 難度金字塔：水平長條，每列一個難度，數值直接標在長條尾端。
  * 單一數列，不需要圖例；滑鼠停留／點按時以 title 顯示說明。
  */
 export function GradePyramid({ rows, max = 8 }: { rows: PyramidRow[]; max?: number }) {
-  if (rows.length === 0) return <p className="muted small">完攀路線後，這裡會顯示各難度完攀了幾條。</p>
+  const { t } = useLang()
+  if (rows.length === 0) return <p className="muted small">{t('chart.pyramidEmpty')}</p>
   const shown = rows.slice(0, max)
   const top = Math.max(...shown.map((r) => r.routes))
   return (
-    <div className="chart" role="table" aria-label="各難度完攀路線數">
+    <div className="chart" role="table" aria-label={t('chart.pyramidAria')}>
       {shown.map((r) => (
-        <div key={r.value} className="pyramid-row" role="row" title={`${r.grade}：完攀 ${r.routes} 條`}>
+        <div key={r.value} className="pyramid-row" role="row" title={t('chart.pyramidRow', { grade: r.grade, n: r.routes })}>
           <span className="pyramid-label" role="rowheader">
             {r.grade}
           </span>
@@ -22,13 +24,14 @@ export function GradePyramid({ rows, max = 8 }: { rows: PyramidRow[]; max?: numb
           </span>
         </div>
       ))}
-      {rows.length > max && <p className="muted small">還有 {rows.length - max} 個較低的難度</p>}
+      {rows.length > max && <p className="muted small">{t('chart.moreGrades', { n: rows.length - max })}</p>}
     </div>
   )
 }
 
 /** 最近 12 個月每月攀登紀錄筆數：直條，只標月份；數值在滑鼠停留／點按時顯示 */
 export function MonthlyChart({ months }: { months: MonthCount[] }) {
+  const { lang, t } = useLang()
   const top = Math.max(1, ...months.map((m) => m.count))
   const W = 336
   const H = 96
@@ -37,14 +40,14 @@ export function MonthlyChart({ months }: { months: MonthCount[] }) {
   const total = months.reduce((n, m) => n + m.count, 0)
   return (
     <figure className="chart monthly">
-      <svg viewBox={`0 0 ${W} ${H + 18}`} role="img" aria-label={`最近 12 個月共 ${total} 筆攀登紀錄`}>
+      <svg viewBox={`0 0 ${W} ${H + 18}`} role="img" aria-label={t('chart.monthsAria', { n: total })}>
         <line x1="0" x2={W} y1={H + 0.5} y2={H + 0.5} className="axis" />
         {months.map((m, i) => {
           const h = m.count === 0 ? 0 : Math.max(4, (m.count / top) * (H - 14))
           const x = i * (barW + gap)
           return (
             <g key={m.key}>
-              <title>{`${m.key.replace('-', '/')}：${m.count} 筆`}</title>
+              <title>{t('chart.monthBar', { month: m.key.replace('-', '/'), n: m.count })}</title>
               {/* 加大的透明感應區，方便手機點按 */}
               <rect x={x} y={0} width={barW} height={H} fill="transparent" />
               {h > 0 && <path className="bar" d={roundedTop(x, H - h, barW, h, Math.min(4, barW / 2))} />}
@@ -53,9 +56,9 @@ export function MonthlyChart({ months }: { months: MonthCount[] }) {
                   {m.count}
                 </text>
               )}
-              {(i === 0 || i === months.length - 1 || m.label === '1月') && (
+              {(i === 0 || i === months.length - 1 || m.key.endsWith('-01')) && (
                 <text x={x + barW / 2} y={H + 14} className="tick" textAnchor="middle">
-                  {m.label}
+                  {monthShort(m.key, lang)}
                 </text>
               )}
             </g>
@@ -77,14 +80,15 @@ function roundedTop(x: number, y: number, w: number, h: number, r: number): stri
  * 單一數列、所有區域同一個顏色，方便互相比較；區域色只用在卡片左框。
  */
 export function GradeDistribution({ bands }: { bands: { band: GradeBand; label: string; count: number }[] }) {
+  const { t } = useLang()
   const top = Math.max(1, ...bands.map((b) => b.count))
   const W = 160
   const H = 44
   const gap = 6
   const barW = (W - gap * (bands.length - 1)) / bands.length
-  const summary = bands.map((b) => `${b.label} ${b.count} 條`).join('、')
+  const summary = bands.map((b) => t('chart.distBar', { band: b.label, n: b.count })).join(', ')
   return (
-    <svg className="grade-dist" viewBox={`0 0 ${W} ${H + 26}`} role="img" aria-label={`難度分佈：${summary}`}>
+    <svg className="grade-dist" viewBox={`0 0 ${W} ${H + 26}`} role="img" aria-label={t('chart.distAria', { summary })}>
       <line x1="0" x2={W} y1={H + 12.5} y2={H + 12.5} className="axis" />
       {bands.map((b, i) => {
         const h = b.count === 0 ? 0 : Math.max(3, (b.count / top) * H)
@@ -92,7 +96,7 @@ export function GradeDistribution({ bands }: { bands: { band: GradeBand; label: 
         const y = H + 12 - h
         return (
           <g key={b.band}>
-            <title>{`${b.label}：${b.count} 條`}</title>
+            <title>{t('chart.distBar', { band: b.label, n: b.count })}</title>
             <rect x={x} y={0} width={barW} height={H + 26} fill="transparent" />
             {h > 0 && <path className="bar" d={roundedTop(x, y, barW, h, 3)} />}
             <text x={x + barW / 2} y={y - 3} className="value" textAnchor="middle">
