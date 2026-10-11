@@ -112,7 +112,6 @@ export function parseAreaSheet(text: string, opts: AreaSheetOptions): ParsedArea
     line: number
   }
   const blocks: Block[] = []
-  const notes: string[] = []
   let currentSector: string | undefined
   let current: Block | undefined
 
@@ -128,9 +127,7 @@ export function parseAreaSheet(text: string, opts: AreaSheetOptions): ParsedArea
       current = { sector: currentSector, rows: [r], line: i + 1 }
       blocks.push(current)
     } else if (no) {
-      // 路線編號欄出現長文字，是區域層級的說明
-      const note = cleanText(no)
-      if (note) notes.push(note)
+      // 路線編號欄出現說明文字（例如第二洞的開發歷史）：只留在 Sheet，不匯入
       current = undefined
     } else if (current && r.some((c) => c.trim())) {
       current.rows.push(r)
@@ -221,7 +218,6 @@ export function parseAreaSheet(text: string, opts: AreaSheetOptions): ParsedArea
     id: `${cragId}/${areaId}`,
     name: title,
     summary: { bolts: parseInt0(bolts), routes: parseInt0(routes) },
-    notes,
     sectors,
     warnings,
     idErrors,

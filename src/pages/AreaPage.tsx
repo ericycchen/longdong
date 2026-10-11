@@ -22,12 +22,6 @@ export function AreaPage({ data, id }: { data: LoadedData; id: string }) {
         {t('count.routes', { n: routeCount })}
       </p>
 
-      {area.notes.map((n) => (
-        <p key={n} className="note">
-          {n}
-        </p>
-      ))}
-
       {area.sectors.length === 1 ? (
         <SectorRoutes data={data} sector={area.sectors[0]} />
       ) : (

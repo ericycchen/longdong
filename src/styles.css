@@ -641,13 +641,6 @@ main {
   margin: 24px 4px 8px;
 }
 
-.note {
-  padding: 12px 14px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  white-space: pre-line;
-  font-size: 0.9rem;
-}
 
 /* ---------- 路線清單 ---------- */
 

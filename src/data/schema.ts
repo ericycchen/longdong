@@ -91,7 +91,6 @@ export const Area = z.object({
   color: z.string().regex(/^#[0-9a-f]{6}$/).optional(),
   /** Sheet 表頭上的統計數字 */
   summary: z.object({ bolts: z.number().optional(), routes: z.number().optional() }),
-  notes: z.array(z.string()),
   sectors: z.array(Sector),
 })
 
