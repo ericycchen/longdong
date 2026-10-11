@@ -97,6 +97,12 @@ npm run preview      # 預覽 build 結果，可測試離線
 
 網址用相對路徑、路由用 hash，所以放在 GitHub Pages 子路徑或自訂網域都可以。
 
+## 舊網址轉址
+
+舊站 `longdong.web.app` 與 `longdong.climbio.org`（CNAME 指向 `longdong.firebaseapp.com`）都在舊 Firebase 專案的 Hosting 上，
+以 `firebase.json` 的 `hosting.redirects` 全部 301 轉到新網址；`firebase/redirect/` 是保底頁面。
+Firebase 保留路徑（`/__/auth/handler` 等）不受影響，登入照常運作。修改後以 `firebase deploy --only hosting` 部署。
+
 ## 授權
 
 - 程式碼：[MIT](LICENSE)
