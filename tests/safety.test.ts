@@ -30,3 +30,15 @@ describe('parseSafetyHtml', () => {
     expect(parseSafetyHtml(tr(2, dots('#ffe3e3', '#fff2cc', '#6aa84f')), '999').ratings.size).toBe(0)
   })
 })
+
+import { parseTitleColor } from '../scripts/lib/safety'
+
+describe('parseTitleColor', () => {
+  it('讀出標題列儲存格的底色', () => {
+    const html =
+      '<style>.ritz .waffle .s0{border:1px;background-color:#CC0000;color:#fff;}.ritz .waffle .s6{background-color:#ffffff;}</style>' +
+      '<tr><th id="123R0"><div>1</div></th><td class="s0">後門</td></tr><tr><th id="123R1"></th><td class="s6">分區</td></tr>'
+    expect(parseTitleColor(html, '123')).toBe('#cc0000')
+    expect(parseTitleColor(html, '999')).toBeUndefined()
+  })
+})

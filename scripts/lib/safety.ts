@@ -45,3 +45,12 @@ export function parseSafetyHtml(
   }
   return { ratings, unreadable }
 }
+
+/** 分頁標題列（第 1 列）的底色，例如後門 #cc0000；讀不到時回傳 undefined */
+export function parseTitleColor(html: string, gid: string): string | undefined {
+  const row = html.split('<tr').find((tr) => tr.includes(`id="${gid}R0"`))
+  const cls = row?.match(/<td class="(s\d+)"/)?.[1]
+  if (!cls) return undefined
+  const css = html.match(new RegExp(String.raw`(?:^|[^\w-])\.${cls}\{([^}]*)\}`))?.[1] ?? ''
+  return css.match(/background-color:\s*(#[0-9a-fA-F]{6})/)?.[1]?.toLowerCase()
+}

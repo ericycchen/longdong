@@ -42,3 +42,18 @@ describe('gradeBand', () => {
     expect(gradeBand(undefined)).toBeUndefined()
   })
 })
+
+import { gradeDistribution } from '../src/format'
+
+describe('gradeDistribution', () => {
+  it('依五個區間計數，沒有難度的不算', () => {
+    const d = gradeDistribution([{ gradeValue: 30 }, { gradeValue: 36 }, { gradeValue: 41 }, { gradeValue: 55 }, {}])
+    expect(d.map((x) => [x.label, x.count])).toEqual([
+      ['5.9-', 2],
+      ['5.10', 1],
+      ['5.11', 0],
+      ['5.12', 0],
+      ['5.13+', 1],
+    ])
+  })
+})

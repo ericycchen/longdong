@@ -1568,3 +1568,87 @@ main {
   font-size: 1.6rem;
   color: var(--faint);
 }
+
+/* ---------- 首頁：一區一列 ---------- */
+
+.area-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  display: grid;
+  gap: 10px;
+}
+
+.area-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr minmax(140px, 168px);
+  gap: 12px;
+  align-items: center;
+  padding: 14px 14px 12px 20px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--card-border);
+  color: var(--text);
+  overflow: hidden;
+}
+
+.area-row:hover {
+  text-decoration: none;
+  background: var(--surface-2);
+}
+
+/* 左框：Sheet 上該區域的顏色 */
+.area-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  background: var(--area-color, var(--brand));
+}
+
+.area-info {
+  display: grid;
+  min-width: 0;
+}
+
+.area-info .area-count {
+  margin-top: 8px;
+  padding-top: 0;
+}
+
+.grade-dist {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.grade-dist .bar {
+  fill: var(--chart);
+}
+
+.grade-dist .axis {
+  stroke: var(--border);
+}
+
+.grade-dist .tick {
+  fill: var(--muted);
+  font-size: 9px;
+}
+
+.grade-dist .value {
+  fill: var(--text);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.grade-dist g:hover .bar {
+  filter: brightness(1.15);
+}
+
+.nowrap {
+  white-space: nowrap;
+}

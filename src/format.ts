@@ -73,3 +73,21 @@ export function gradeBand(gradeValue: number | undefined): GradeBand | undefined
   if (gradeValue < 52) return 'g12'
   return 'g13'
 }
+
+export const GRADE_BANDS: { band: GradeBand; label: string }[] = [
+  { band: 'easy', label: '5.9-' },
+  { band: 'g10', label: '5.10' },
+  { band: 'g11', label: '5.11' },
+  { band: 'g12', label: '5.12' },
+  { band: 'g13', label: '5.13+' },
+]
+
+/** 各難度區間的路線數（沒有難度或無法判讀的不計） */
+export function gradeDistribution(routes: { gradeValue?: number }[]): { band: GradeBand; label: string; count: number }[] {
+  const counts = new Map<GradeBand, number>()
+  for (const r of routes) {
+    const b = gradeBand(r.gradeValue)
+    if (b) counts.set(b, (counts.get(b) ?? 0) + 1)
+  }
+  return GRADE_BANDS.map((b) => ({ ...b, count: counts.get(b.band) ?? 0 }))
+}

@@ -1,4 +1,5 @@
 import type { MonthCount, PyramidRow } from '../personal/stats'
+import type { GradeBand } from '../format'
 
 /**
  * 難度金字塔：水平長條，每列一個難度，數值直接標在長條尾端。
@@ -69,4 +70,40 @@ export function MonthlyChart({ months }: { months: MonthCount[] }) {
 function roundedTop(x: number, y: number, w: number, h: number, r: number): string {
   const rr = Math.min(r, h)
   return `M${x},${y + h}V${y + rr}Q${x},${y} ${x + rr},${y}H${x + w - rr}Q${x + w},${y} ${x + w},${y + rr}V${y + h}Z`
+}
+
+/**
+ * 區域的難度分佈：五個區間的直條，數量標在柱子上方。
+ * 單一數列、所有區域同一個顏色，方便互相比較；區域色只用在卡片左框。
+ */
+export function GradeDistribution({ bands }: { bands: { band: GradeBand; label: string; count: number }[] }) {
+  const top = Math.max(1, ...bands.map((b) => b.count))
+  const W = 160
+  const H = 44
+  const gap = 6
+  const barW = (W - gap * (bands.length - 1)) / bands.length
+  const summary = bands.map((b) => `${b.label} ${b.count} 條`).join('、')
+  return (
+    <svg className="grade-dist" viewBox={`0 0 ${W} ${H + 26}`} role="img" aria-label={`難度分佈：${summary}`}>
+      <line x1="0" x2={W} y1={H + 12.5} y2={H + 12.5} className="axis" />
+      {bands.map((b, i) => {
+        const h = b.count === 0 ? 0 : Math.max(3, (b.count / top) * H)
+        const x = i * (barW + gap)
+        const y = H + 12 - h
+        return (
+          <g key={b.band}>
+            <title>{`${b.label}：${b.count} 條`}</title>
+            <rect x={x} y={0} width={barW} height={H + 26} fill="transparent" />
+            {h > 0 && <path className="bar" d={roundedTop(x, y, barW, h, 3)} />}
+            <text x={x + barW / 2} y={y - 3} className="value" textAnchor="middle">
+              {b.count || ''}
+            </text>
+            <text x={x + barW / 2} y={H + 24} className="tick" textAnchor="middle">
+              {b.label}
+            </text>
+          </g>
+        )
+      })}
+    </svg>
+  )
 }

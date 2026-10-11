@@ -87,6 +87,8 @@ export const Sector = z.object({
 export const Area = z.object({
   id: GlobalId,
   name: LocalizedName,
+  /** Sheet 上該區域標題列的底色，App 用作區域的識別色 */
+  color: z.string().regex(/^#[0-9a-f]{6}$/).optional(),
   /** Sheet 表頭上的統計數字 */
   summary: z.object({ bolts: z.number().optional(), routes: z.number().optional() }),
   notes: z.array(z.string()),

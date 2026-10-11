@@ -12,7 +12,7 @@ import { appendFileSync, existsSync, readFileSync, writeFileSync, mkdirSync } fr
 import { dirname, join, resolve } from 'node:path'
 import { Dataset, type Area } from '../src/data/schema'
 import { parseAreaSheet, parseHardwareSheet } from './lib/parse'
-import { htmlUrl, parseSafetyHtml } from './lib/safety'
+import { htmlUrl, parseSafetyHtml, parseTitleColor } from './lib/safety'
 import { checkRouteIds, publishedRoutes, type IdSource, type PreviousIds } from './lib/ids'
 import { RETIRED_ROUTE_IDS } from './retired-ids'
 import { AREA_TABS, CRAG, DATA_ATTRIBUTION, DATA_LICENSE, PROJECT_URL, SHEET_ID, SHEET_URL, STATS_GID, csvUrl } from './sheet.config'
@@ -64,6 +64,9 @@ async function main() {
       expectedZh: tab.zh,
       safety: ratings,
     })
+    const color = parseTitleColor(areaHtmls[i], tab.gid)
+    if (color) area.color = color
+    else warnings.push(`[${tab.id}] 讀不到標題列的顏色`)
     warnings.push(...w)
     idErrors.push(...e)
     if (hasIdColumn) withIdColumn.push(tab.zh)
