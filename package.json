@@ -16,6 +16,7 @@
     "rescue-map": "tsx scripts/gen-rescue-map.ts",
     "scale-map": "tsx scripts/gen-scale-map.ts",
     "test": "vitest run",
+    "check:text": "tsx scripts/check-text-overflow.ts",
     "test:rules": "npx -y firebase-tools@15.33.0 emulators:exec --only database --project demo-longdong \"vitest run --config vitest.rules.config.ts\"",
     "typecheck": "tsc --noEmit"
   },
@@ -38,6 +39,7 @@
     "fake-indexeddb": "^6.2.5",
     "papaparse": "^5.7.0",
     "pdfjs-dist": "^6.4.299",
+    "playwright-core": "^1.64.1",
     "tsx": "^4.23.15",
     "typescript": "~5.9.3",
     "vite": "^6.4.4",

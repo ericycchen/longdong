@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import type { Bolt, Route } from '../src/data/schema'
 import { quickdraws, typeText } from '../src/format'
 import { translate } from '../src/i18n'
+import { en } from '../src/i18n/en'
+import { zh } from '../src/i18n/zh'
 
-const tz = (k: Parameters<typeof translate>[1], v?: Record<string, string | number>) => translate('zh', k, v)
-const te = (k: Parameters<typeof translate>[1], v?: Record<string, string | number>) => translate('en', k, v)
+const tz = (k: Parameters<typeof translate>[1], v?: Record<string, string | number>) => translate(zh, k, v)
+const te = (k: Parameters<typeof translate>[1], v?: Record<string, string | number>) => translate(en, k, v)
 
 const bolt = (position: string, material = '316-TW'): Bolt => ({ position, material, tests: [] })
 const route = (over: Partial<Route>): Route => ({
@@ -66,10 +68,10 @@ describe('gradeDistribution', () => {
 import { sectorColor, typeSummary } from '../src/format'
 
 describe('typeSummary', () => {
-  it('簡化為運攀與傳攀/其他，固定點不計', () => {
+  it('簡化為運攀與傳攀／其他，固定點不計', () => {
     expect(
       typeSummary([{ type: 'sport' }, { type: 'sport' }, { type: 'trad' }, { type: 'boulder' }, { type: 'toprope' }, { isFixture: true }], tz),
-    ).toBe('運攀 2 · 傳攀/其他 3')
+    ).toBe('運攀 2 · 傳攀／其他 3')
     expect(typeSummary([{ type: 'trad' }], te)).toBe('Trad/other 1')
     expect(typeSummary([], tz)).toBe('')
   })
