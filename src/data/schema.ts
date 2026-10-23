@@ -64,6 +64,8 @@ export const Route = z.object({
   heightM: z.number().positive().optional(),
   firstAscent: z.string().optional(),
   firstAscentDate: PartialDate.optional(),
+  /** 首攀日期讀不成日期時的原文，例如「1990年代」 */
+  firstAscentDateLabel: z.string().optional(),
   description: z.string().optional(),
   safety: Safety.optional(),
   bolts: z.array(Bolt),
@@ -79,7 +81,10 @@ export const Route = z.object({
 })
 
 export const Sector = z.object({
+  /** <岩場>/<區域>-<中文名稱雜湊>，例如 longdong/back-door-k3x9a2 */
   id: GlobalId,
+  /** 以前依位置編號的 ID（longdong/back-door-s1），舊網址與舊的現場回報用它找到分區 */
+  legacyIds: z.array(GlobalId).optional(),
   name: LocalizedName,
   routes: z.array(Route),
 })

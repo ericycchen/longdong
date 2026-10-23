@@ -60,6 +60,7 @@ export const ROUTE_ID = /^[2-9a-hjkmnp-z]{6}$/
 /**
  * ID 規則（使用者的收藏與攀登紀錄會用到，發布後不可再改）：
  *   區域  <crag>/<area>              longdong/back-door
+ *   分區  <crag>/<area>-<中文名稱雜湊>  longdong/back-door-k3x9a2（插入或調換分區不影響其他分區）
  *   路線  <crag>/<路線ID 欄>          longdong/7kq2mx（Sheet 的「路線ID」欄，由 Apps Script 產生）
  * Sheet 還沒有「路線ID」欄時，暫用舊規則：<crag>/<路線編號>，未編號者 <crag>/x-<區域＋名稱雜湊>
  */
@@ -137,6 +138,7 @@ export function parseAreaSheet(text: string, opts: AreaSheetOptions): ParsedArea
   // 2. 區塊轉成路線，並依分區分組
   const sectors: Sector[] = []
   const sectorByKey = new Map<string, Sector>()
+  const unreadable: string[] = []
 
   for (const block of blocks) {
     const first = block.rows[0]
@@ -183,6 +185,8 @@ export function parseAreaSheet(text: string, opts: AreaSheetOptions): ParsedArea
       heightM: parseHeight(cell(C.height)),
       firstAscent: cleanPeople(first[C.fa]),
       firstAscentDate: parseDate(cell(C.faDate)),
+      // 讀不成日期的首攀日期（例如「1990年代」）保留原文，不推測日期
+      firstAscentDateLabel: parseDate(cell(C.faDate)) ? undefined : cleanText(first[C.faDate]),
       description: cleanParagraphs(first[C.description]),
       safety: safety.get(block.line - 1) ?? undefined,
       bolts,
@@ -195,9 +199,12 @@ export function parseAreaSheet(text: string, opts: AreaSheetOptions): ParsedArea
       lastTested: latestDate([...bolts, ...anchors].flatMap((b) => b.tests)),
       notes: cleanText(first[C.notes]),
     }
+    const at = `第 ${block.line} 列 #${number ?? '0'} ${name.zh}`
     if (cell(C.safety).includes('●') && !safety.has(block.line - 1)) {
-      warnings.push(`[${areaId}] #${number ?? '0'} ${name.zh}：讀不到安全評級燈號`)
+      unreadable.push(`${at}：讀不到安全評級燈號，Sheet 版面可能變了`)
     }
+    if (cell(C.type) && !type) unreadable.push(`${at}：路線種類「${cell(C.type)}」不在對照表`)
+    if (statusLabel && !route.status) unreadable.push(`${at}：路線狀態「${statusLabel}」不在對照表`)
     if (grade && route.gradeValue === undefined && !/\?\?/.test(grade)) {
       warnings.push(`[${areaId}] #${number ?? '0'} ${name.zh}：無法判讀難度「${grade}」`)
     }
@@ -206,11 +213,20 @@ export function parseAreaSheet(text: string, opts: AreaSheetOptions): ParsedArea
     const key = sectorName.zh
     let sector = sectorByKey.get(key)
     if (!sector) {
-      sector = { id: `${cragId}/${areaId}-s${sectors.length + 1}`, name: sectorName, routes: [] }
+      const id = sectorId(cragId, areaId, sectorName.zh)
+      const same = sectors.find((x) => x.id === id)
+      if (same) throw new Error(`[${areaId}] 分區「${same.name.zh}」與「${sectorName.zh}」的 ID 相同（${id}），請改用其他雜湊`)
+      sector = { id, name: sectorName, routes: [] }
       sectorByKey.set(key, sector)
       sectors.push(sector)
     }
     sector.routes.push(stripUndefined(route))
+  }
+
+  if (unreadable.length) {
+    throw new Error(
+      `[${areaId}] 以下路線讀不懂，已停止匯入（修正 Sheet，或把新的種類、狀態加進 scripts/lib/normalize.ts 的對照表）：\n  ${unreadable.join('\n  ')}`,
+    )
   }
 
   const [, bolts, , routes] = rows[0]
@@ -223,6 +239,27 @@ export function parseAreaSheet(text: string, opts: AreaSheetOptions): ParsedArea
     idErrors,
     hasIdColumn: idCol >= 0,
   }
+}
+
+/** 分區 ID：區域＋中文名稱的雜湊（6 碼 [0-9a-z]），不受分區在 Sheet 上的位置影響 */
+export function sectorId(cragId: string, areaId: string, zhName: string): string {
+  const n = parseInt(createHash('sha1').update(zhName).digest('hex').slice(0, 8), 16) % 36 ** 6
+  return `${cragId}/${areaId}-${n.toString(36).padStart(6, '0')}`
+}
+
+/**
+ * 掛上舊的分區 ID（依位置編號的 <area>-s<N>，見 scripts/data/legacy-sector-ids.json），
+ * 舊網址與舊的現場回報才找得到分區。回傳對不到現在分區的舊 ID（分區改名或刪除）。
+ */
+export function attachLegacySectorIds(areas: Area[], legacy: Record<string, string>): string[] {
+  const byId = new Map(areas.flatMap((a) => a.sectors.map((s) => [s.id, s] as const)))
+  const orphans: string[] = []
+  for (const [old, id] of Object.entries(legacy)) {
+    const sector = byId.get(id)
+    if (sector) (sector.legacyIds ??= []).push(old)
+    else orphans.push(old)
+  }
+  return orphans
 }
 
 /** 一個 bolt 欄（同一路線的多列）：材質、安裝日期、年資、拉測日期… */

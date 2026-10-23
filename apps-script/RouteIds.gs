@@ -6,13 +6,18 @@
  * - 每條路線一個固定不變的 ID（6 碼短碼，例如 7kq2mx），App 用它記錄使用者的收藏與攀登紀錄。
  * - 新增路線（填好編號與名稱）時自動產生 ID。
  * - 「路線ID」欄不能手動修改：任何人改到這一欄（打字、清除、貼上），都會立刻還原成原本的 ID。
- *   原本的 ID 依序從：編輯前的值 → 已發布的網站資料（同分頁、同編號、同名）找回；都找不到才產生新的。
+ *   原本的 ID 依序從：編輯前的值 → 已發布的網站資料（同編號、同名，未編號者同分頁、同名）找回；都找不到才產生新的。
+ *   例外：改成已發布、且沒被其他路線使用的 ID 會被接受（匯入錯誤訊息要維護者把 ID 改回原本的）。
  * - 選單「路線ID → 補上缺少的 ID」：替沒有 ID 的路線找回或產生 ID，也會修正重複的 ID。
+ *   先保留格式正確且不重複的現有 ID，再處理其餘的列，新路線不會搶走既有路線的 ID。
  */
 
 var ID_HEADER = '路線ID'
+// 對照表的鍵改變時換名稱，避免讀到舊格式的快取
+var CACHE_KEY = 'published-ids-v2'
 var HEADER_FIRST_CELL = '分區'
-var PUBLISHED_URL = 'https://tocc-climbing.github.io/longdong/data/longdong.json'
+// 正式站（firebase.json 的 hosting.site）
+var PUBLISHED_URL = 'https://longdong.web.app/data/longdong.json'
 // 不含容易看錯的 0/o、1/l/i
 var ALPHABET = '23456789abcdefghjkmnpqrstuvwxyz'
 var ID_LENGTH = 6
@@ -86,8 +91,16 @@ function handleEdit(e) {
   try {
     // 單一儲存格的編輯，Google 會提供編輯前的值
     var oldValue = touchesId && e.range.getNumRows() === 1 && e.range.getNumColumns() === 1 ? e.oldValue : null
+    var published
+    try {
+      published = loadPublished(false)
+    } catch (err) {
+      // 讀不到已發布資料就不動任何 ID：產生新 ID 會取代原本的 ID，交給維護者稍後重跑
+      sheet.getParent().toast(err.message + '。這次沒有處理路線ID，請稍後執行「路線ID → 補上缺少的 ID」。', '路線ID', 30)
+      return
+    }
     var rows = { from: e.range.getRow(), to: e.range.getLastRow() }
-    var result = repairRows(sheet, layout, rows, oldValue, loadPublished(false))
+    var result = repairRows(sheet, layout, rows, oldValue, published)
     if (touchesId && result.restored + result.created > 0) {
       sheet.getParent().toast('「路線ID」欄不能手動修改，已自動還原。', '路線ID', 5)
     }
@@ -134,16 +147,27 @@ function repairRows(sheet, layout, rows, oldValue, published) {
   var created = 0
   var changed = false
   var claimed = {}
+  var publishedIds = collectPublishedIds(published)
+  var currents = []
+  var candidatesOf = []
   for (var t = 0; t < targets.length; t++) {
     var k = targets[t]
-    var current = String(ids[k][0]).trim()
-    var candidates = []
-    if (oldValue) candidates.push(String(oldValue).trim())
-    var fromPublished = published ? lookupPublished(published, sheet.getName(), numbers[k][0], names[k][0]) : []
-    candidates = candidates.concat(fromPublished)
-    var decision = resolveRowId(current, candidates, function (id) {
+    currents[t] = String(ids[k][0]).trim()
+    candidatesOf[t] = (oldValue ? [String(oldValue).trim()] : []).concat(
+      lookupPublished(published, sheet.getName(), numbers[k][0], names[k][0]),
+    )
+  }
+  // 整頁補上時分兩輪，結果不受列的順序影響：先保留現有的 ID，再替其餘的列找回或產生
+  var kept = rows ? [] : keepExistingIds(currents, candidatesOf, usedElsewhere, publishedIds)
+  for (var j = 0; j < kept.length; j++) if (kept[j]) claimed[currents[j]] = true
+  for (t = 0; t < targets.length; t++) {
+    if (kept[t]) continue
+    k = targets[t]
+    var current = currents[t]
+    // 整頁補上的第二輪只處理空白、格式不對或重複的 ID，現有值不再採用
+    var decision = resolveRowId(rows ? current : '', candidatesOf[t], function (id) {
       return usedElsewhere[id] === true || claimed[id] === true
-    })
+    }, publishedIds[current] === true)
     var id = decision.id || newUniqueId(mergeUsed(usedElsewhere, claimed))
     claimed[id] = true
     if (id !== current) {
@@ -158,12 +182,34 @@ function repairRows(sheet, layout, rows, oldValue, published) {
 }
 
 /**
- * 決定一列的 ID（純函式，方便測試）：
- * 1. 依序檢查 candidates（編輯前的值、已發布資料中同一條路線的 ID），格式正確且沒被別列使用就用它
- * 2. 沒有候選時，現有值格式正確且沒被別列使用，就保留
- * 3. 否則回傳 { id: null }，由呼叫端產生新 ID
+ * 整頁補上的第一輪（純函式，方便測試）：回傳各列是否保留現有的 ID。保留的條件：
+ * - 格式正確、在 Sheet 中不重複
+ * - 是已發布的 ID；或不是，但這條路線沒有可找回的已發布 ID（沒被任何列使用的候選）
  */
-function resolveRowId(current, candidates, isUsed) {
+function keepExistingIds(currents, candidatesOf, usedElsewhere, publishedIds) {
+  var count = {}
+  for (var i = 0; i < currents.length; i++) count[currents[i]] = (count[currents[i]] || 0) + 1
+  var free = function (id) {
+    return ID_PATTERN.test(id) && !usedElsewhere[id] && !count[id]
+  }
+  var kept = []
+  for (i = 0; i < currents.length; i++) {
+    var c = currents[i]
+    kept[i] =
+      ID_PATTERN.test(c) && count[c] === 1 && !usedElsewhere[c] && (publishedIds[c] === true || !candidatesOf[i].some(free))
+  }
+  return kept
+}
+
+/**
+ * 決定一列的 ID（純函式，方便測試）：
+ * 1. 現有值是已發布的 ID 且沒被別列使用，就保留（例如維護者依匯入錯誤訊息把 ID 改回原本的）
+ * 2. 依序檢查 candidates（編輯前的值、已發布資料中同一條路線的 ID），格式正確且沒被別列使用就用它
+ * 3. 沒有候選時，現有值格式正確且沒被別列使用，就保留
+ * 4. 否則回傳 { id: null }，由呼叫端產生新 ID
+ */
+function resolveRowId(current, candidates, isUsed, currentIsPublished) {
+  if (currentIsPublished && ID_PATTERN.test(current) && !isUsed(current)) return { id: current }
   for (var i = 0; i < candidates.length; i++) {
     var c = candidates[i]
     if (ID_PATTERN.test(c) && !isUsed(c)) return { id: c }
@@ -174,25 +220,48 @@ function resolveRowId(current, candidates, isUsed) {
 
 /* ---------- 已發布的網站資料 ---------- */
 
-/** 讀取已發布的資料，建立「分頁|編號|名稱」等對照。forceRefresh 為 true 時不用快取 */
+/**
+ * 讀取已發布的資料，建立「分頁|編號|名稱」等對照。forceRefresh 為 true 時不用快取。
+ * 讀不到時丟出錯誤：當成「沒有已發布的 ID」繼續，會替路線產生新 ID 取代原本的。
+ */
 function loadPublished(forceRefresh) {
   var cache = CacheService.getScriptCache()
-  var cached = forceRefresh ? null : cache.get('published-ids')
+  var cached = forceRefresh ? null : cache.get(CACHE_KEY)
   if (cached) return JSON.parse(cached)
+  var res
   try {
-    var res = UrlFetchApp.fetch(PUBLISHED_URL, { muteHttpExceptions: true })
-    if (res.getResponseCode() !== 200) return null
-    var data = JSON.parse(res.getContentText())
-    if (data.idSource !== 'sheet') return null
-    var index = buildPublishedIndex(data)
-    cache.put('published-ids', JSON.stringify(index), 21600)
-    return index
+    res = UrlFetchApp.fetch(PUBLISHED_URL, { muteHttpExceptions: true })
   } catch (err) {
-    return null
+    throw new Error(publishedError(err.message))
   }
+  var index = parsePublished(res.getResponseCode(), res.getContentText())
+  cache.put(CACHE_KEY, JSON.stringify(index), 21600)
+  return index
 }
 
-/** 已發布資料 → { 鍵: [ID…] }。鍵有三種：分頁|編號|名稱、分頁|名稱、分頁|編號 */
+/** 已發布資料的回應 → 對照表（純函式，方便測試）；讀不懂就丟出錯誤 */
+function parsePublished(status, text) {
+  if (status !== 200) throw new Error(publishedError('HTTP ' + status))
+  var data
+  try {
+    data = JSON.parse(text)
+  } catch (err) {
+    throw new Error(publishedError('內容不是 JSON'))
+  }
+  // 網站資料還是舊規則的 ID（尚未改用 Sheet 的「路線ID」）：本來就沒有可找回的 ID
+  if (data.idSource !== 'sheet') return {}
+  return buildPublishedIndex(data)
+}
+
+function publishedError(reason) {
+  return '讀不到已發布的網站資料（' + PUBLISHED_URL + '，' + reason + '），無法找回原本的路線ID'
+}
+
+/**
+ * 已發布資料 → { 鍵: [ID…] }。鍵有三種：
+ * - 編號|名稱（路線編號在全龍洞唯一，搬到別的分頁也找得到；未編號者為 分頁|名稱）
+ * - 分頁|名稱、分頁|編號
+ */
 function buildPublishedIndex(data) {
   var index = {}
   var add = function (key, id) {
@@ -207,7 +276,7 @@ function buildPublishedIndex(data) {
         var id = routes[r].id.split('/').pop()
         var no = routes[r].number || ''
         var name = routes[r].name.zh
-        add('full|' + area.name.zh + '|' + no + '|' + name, id)
+        add(fullKey(area.name.zh, no, name), id)
         add('name|' + area.name.zh + '|' + name, id)
         if (no) add('number|' + area.name.zh + '|' + no, id)
       }
@@ -216,11 +285,20 @@ function buildPublishedIndex(data) {
   return index
 }
 
+/** 已發布資料中所有的 ID → { ID: true } */
+function collectPublishedIds(index) {
+  var ids = {}
+  for (var key in index) {
+    for (var i = 0; i < index[key].length; i++) ids[index[key][i]] = true
+  }
+  return ids
+}
+
 /** 找出這一列在已發布資料中對應的 ID；只採用唯一對應，避免誤配 */
 function lookupPublished(index, sheetName, rawNumber, rawName) {
   var no = normalizeNumber(rawNumber)
   var name = zhName(rawName)
-  var keys = ['full|' + sheetName + '|' + no + '|' + name, 'name|' + sheetName + '|' + name]
+  var keys = [fullKey(sheetName, no, name), 'name|' + sheetName + '|' + name]
   if (no) keys.push('number|' + sheetName + '|' + no)
   var out = []
   for (var i = 0; i < keys.length; i++) {
@@ -228,6 +306,11 @@ function lookupPublished(index, sheetName, rawNumber, rawName) {
     if (ids && ids.length === 1 && out.indexOf(ids[0]) < 0) out.push(ids[0])
   }
   return out
+}
+
+/** 同一條路線的鍵：有編號時不分分頁（與匯入程式的 ID 檢查一致） */
+function fullKey(sheetName, no, name) {
+  return no ? 'full|#' + no + '|' + name : 'full|' + sheetName + '|' + name
 }
 
 /** "# 523" → "523"；"0"、"# 0"、"0.00" 視為未編號 */
@@ -336,10 +419,13 @@ if (typeof module !== 'undefined') {
     newUniqueId: newUniqueId,
     isRouteRow: isRouteRow,
     resolveRowId: resolveRowId,
+    repairRows: repairRows,
     buildPublishedIndex: buildPublishedIndex,
+    parsePublished: parsePublished,
     lookupPublished: lookupPublished,
     normalizeNumber: normalizeNumber,
     zhName: zhName,
     ID_PATTERN: ID_PATTERN,
+    PUBLISHED_URL: PUBLISHED_URL,
   }
 }

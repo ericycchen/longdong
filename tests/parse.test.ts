@@ -1,7 +1,9 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import Papa from 'papaparse'
 import { gradeValue, parseDate, splitName, cleanText } from '../scripts/lib/normalize'
-import { parseAreaSheet, parseHardwareSheet } from '../scripts/lib/parse'
+import { attachLegacySectorIds, parseAreaSheet, parseHardwareSheet, sectorId } from '../scripts/lib/parse'
+import type { Area } from '../src/data/schema'
 
 const HEADER = ['分區', '路線編號', '路線名稱', '難度', '路線種類', '高度', '首攀', '首攀日期', '路線資訊描述', '安全評級',
   'B01', 'B02', 'A01', 'A02', 'Anchor 配件', '', 'Bolt 統計', '路線狀態', '日期', '備註']
@@ -117,8 +119,88 @@ describe('parseAreaSheet', () => {
     expect(fixture.number).toBeUndefined()
   })
 
+  it('首攀日期讀不成日期時保留原文，不推測日期', () => {
+    const fa = parseAreaSheet(
+      sheet([
+        row({ 路線編號: '# 1', 路線名稱: 'ㄅ', 難度: '5.7', 首攀: '甲', 首攀日期: '1990年代' }),
+        row({ 路線編號: '# 2', 路線名稱: 'ㄆ', 難度: '5.7', 首攀: '乙', 首攀日期: '1990 / 夏' }),
+        row({ 路線編號: '# 3', 路線名稱: 'ㄇ', 難度: '5.7', 首攀: '丙', 首攀日期: '1991 / 06' }),
+      ]),
+      { cragId: 'longdong', areaId: 'back-door', expectedZh: '後門' },
+    ).sectors[0].routes
+    expect(fa.map((r) => [r.firstAscentDate, r.firstAscentDateLabel])).toEqual([
+      [undefined, '1990年代'],
+      [undefined, '1990 / 夏'],
+      ['1991-06', undefined],
+    ])
+  })
+
+  it('有燈號但讀不到評級的路線，停止匯入並列出', () => {
+    const lights = sheet([
+      row({ 路線編號: '# 1', 路線名稱: 'ㄅ', 難度: '5.7', 安全評級: '●●●' }),
+      row({ 路線編號: '# 2', 路線名稱: 'ㄆ', 難度: '5.8', 安全評級: '●●●' }),
+    ])
+    const opts = { cragId: 'longdong', areaId: 'back-door', expectedZh: '後門' }
+    expect(() => parseAreaSheet(lights, { ...opts, safety: new Map([[2, 'green' as const]]) })).toThrow(
+      /\n {2}第 4 列 #2 ㄆ：讀不到安全評級燈號，Sheet 版面可能變了$/,
+    )
+  })
+
+  it('路線種類、路線狀態不在對照表時停止匯入，列出原文', () => {
+    const unknown = sheet([
+      row({ 路線編號: '# 1', 路線名稱: 'ㄅ', 難度: '5.7', 路線種類: '運攀 | Sport', 路線狀態: '已拉測' }),
+      row({ 路線編號: '# 2', 路線名稱: 'ㄆ', 路線種類: '冰攀 | Ice' }),
+      row({ 路線編號: '# 3', 路線名稱: 'ㄇ', 難度: '5.8', 路線狀態: '施工中' }),
+    ])
+    expect(() => parseAreaSheet(unknown, { cragId: 'longdong', areaId: 'back-door', expectedZh: '後門' })).toThrow(
+      /\n {2}第 4 列 #2 ㄆ：路線種類「冰攀 \| Ice」不在對照表\n {2}第 5 列 #3 ㄇ：路線狀態「施工中」不在對照表$/,
+    )
+  })
+
   it('分頁標題不符時報錯', () => {
     expect(() => parseAreaSheet(csv, { cragId: 'longdong', areaId: 'golden-valley', expectedZh: '黃金谷' })).toThrow(/gid/)
+  })
+})
+
+describe('分區 ID', () => {
+  const opts = { cragId: 'longdong', areaId: 'back-door', expectedZh: '後門' }
+  const sectorIds = (sectors: string[]) =>
+    parseAreaSheet(sheet(sectors.map((zh, i) => row({ 分區: zh, 路線編號: `# ${i + 1}`, 路線名稱: `路線${i}`, 難度: '5.7' }))), opts).sectors.map((s) => [
+      s.name.zh,
+      s.id,
+    ])
+
+  it('由區域與中文名稱決定，每次、每個平台都相同', () => {
+    expect(sectorId('longdong', 'back-door', '地下一樓')).toBe('longdong/back-door-92kxxd')
+  })
+
+  it('插入或調換分區不影響其他分區的 ID', () => {
+    const before = sectorIds(['地下一樓\nB1', '地下二樓'])
+    const after = sectorIds(['新分區', '地下二樓', '地下一樓\nB1'])
+    for (const [zh, id] of before) expect(after).toContainEqual([zh, id])
+  })
+
+  it('同區域兩個分區的 ID 相同時停止匯入', () => {
+    // 這兩個名稱的雜湊剛好相同
+    expect(() => sectorIds(['分區1333', '分區15999'])).toThrow('[back-door] 分區「分區1333」與「分區15999」的 ID 相同')
+  })
+
+  it('掛上凍結的舊 ID，回報對不到的舊 ID', () => {
+    const area = { sectors: [{ id: 'longdong/a-92kxxd', routes: [] }, { id: 'longdong/a-ikx7n4', routes: [] }] } as unknown as Area
+    const orphans = attachLegacySectorIds([area], { 'longdong/a-s2': 'longdong/a-92kxxd', 'longdong/a-s9': 'longdong/a-gone00' })
+    expect(area.sectors.map((s) => s.legacyIds)).toEqual([['longdong/a-s2'], undefined])
+    expect(orphans).toEqual(['longdong/a-s9'])
+  })
+})
+
+describe('舊的分區 ID 對照（scripts/data/legacy-sector-ids.json）', () => {
+  const legacy = JSON.parse(readFileSync(new URL('../scripts/data/legacy-sector-ids.json', import.meta.url), 'utf8')) as Record<string, string>
+  const data = JSON.parse(readFileSync(new URL('../public/data/longdong.json', import.meta.url), 'utf8')) as { areas: Area[] }
+
+  it('每個舊 ID 都掛在資料檔中同區域的分區上', () => {
+    const attached = new Map(data.areas.flatMap((a) => a.sectors.flatMap((s) => (s.legacyIds ?? []).map((old) => [old, s.id] as const))))
+    expect(Object.fromEntries(attached)).toEqual(legacy)
+    for (const [old, id] of Object.entries(legacy)) expect(id.replace(/-[0-9a-z]{6}$/, '')).toBe(old.replace(/-s\d+$/, ''))
   })
 })
 
