@@ -748,21 +748,3 @@
   cursor: copy;
 }
 
-/* 編輯區域的工具列：選單可以縮，提示文字另起一行 */
-.shape-bar select {
-  flex: 1 1 10em;
-  min-width: 0;
-  max-width: 100%;
-  min-height: 36px;
-  border: 0;
-  border-radius: 8px;
-  padding: 0 8px;
-  font: inherit;
-  font-weight: 400;
-}
-
-.shape-bar .shape-hint {
-  flex-basis: 100%;
-  font-size: 0.8125rem;
-  font-weight: 400;
-}
