@@ -11,8 +11,11 @@ import { useWalls } from '../map/walls'
 import { useCloud, withCloud } from '../personal/sync'
 import { href, navigate, type EditKind } from '../router'
 import { displayName, useSocial } from '../social/store'
+import { useTopoState } from '../topo/store'
 import { TopoEditor } from '../topo/TopoEditor'
+import { UploadButton } from '../topo/TopoUpload'
 import { Catalog, useCatalog, type EditItem } from './Catalog'
+import { LatestEdits } from './LatestEdits'
 import { currentText, loadTextEdits, textTarget, useTextEdits, type TextTarget, type TextVersion } from './textEdits'
 import { useMapItem } from './useMapItem'
 import './edit.css'
@@ -166,15 +169,24 @@ export function EditPage({ data, kind, id }: { data: LoadedData; kind?: EditKind
   )
 }
 
-/** 還沒選項目：怎麼開始、有多少項目已經有人修改 */
+/** 這一年（含）以前上傳的 Topo 照片太舊，編輯前提示改上傳新照片 */
+const OLD_TOPO_YEAR = 2016
+
+/** 還沒選項目：標題與重點（與分享小卡相同）、最新的更新、怎麼修改 */
 function Welcome({ items }: { items: EditItem[] }) {
   const { t } = useLang()
+  // 標題裡 *…* 的部分用品牌色（分享小卡的「修改」）
+  const title = t('edit.welcome')
+    .split(/\*(.+?)\*/)
+    .map((part, i) => (i % 2 ? <em key={i}>{part}</em> : part))
   return (
     <>
-      <section className="edit-center edit-message">
-        <h1>{t('edit.welcome')}</h1>
-        <p>{t('edit.welcomeHint')}</p>
-        <p className="muted">{t('edit.progress', { n: items.filter((i) => i.edited).length, total: items.length })}</p>
+      <section className="edit-center edit-message edit-welcome">
+        <h1>{title}</h1>
+        <p className="edit-tags">{t('edit.welcomeTags')}</p>
+        <p className="muted">{t('edit.welcomeHint')}</p>
+        <p className="muted small">{t('edit.progress', { n: items.filter((i) => i.edited).length, total: items.length })}</p>
+        <LatestEdits items={items} />
       </section>
       <aside className="edit-panel">
         <h2>{t('edit.howTitle')}</h2>
@@ -205,13 +217,13 @@ function VersionList({ versions, empty, onDelete }: { versions: (MapEditVersion 
         <ol className="edit-versions">
           {[...versions].reverse().map((v, i) => (
             <li key={v.id}>
-              <span>
+              <span className="edit-version-who">
                 <b>{displayName(profiles, v.uid)}</b>
-                <span className="muted"> · {time(v.createdAt)}</span>
                 {i === 0 && <span className="edit-badge">{t('shape.current')}</span>}
               </span>
+              <span className="edit-version-time muted">{time(v.createdAt)}</span>
               {(v.uid === uid || admin) && (
-                <button type="button" className="link-button" onClick={() => confirm(t('shape.confirmDeleteVersion')) && onDelete(v.id)}>
+                <button type="button" className="link-button danger edit-version-delete" onClick={() => confirm(t('shape.confirmDeleteVersion')) && onDelete(v.id)}>
                   {t('shape.deleteVersion')}
                 </button>
               )}
@@ -520,6 +532,9 @@ function TextItemView({ item, data, onToast, onDirty }: ItemProps) {
 /** Topo 項目：中間是 Topo 編輯器（照片、路線、線段與 bolt 工具都在裡面）；右側面板是使用說明 */
 function TopoItemView({ item, data }: { item: EditItem; data: LoadedData }) {
   const { t } = useLang()
+  const signedIn = useCloud().status === 'signed-in'
+  const photo = useTopoState().photos?.[item.id]
+  const old = photo && new Date(photo.createdAt).getFullYear() <= OLD_TOPO_YEAR
   return (
     <>
       <section className="edit-center edit-topo">
@@ -527,6 +542,12 @@ function TopoItemView({ item, data }: { item: EditItem; data: LoadedData }) {
       </section>
       <aside className="edit-panel">
         <h2>{item.path.slice(1).join(' › ')}</h2>
+        {old && photo && (
+          <div className="edit-warn">
+            <p>{t('edit.oldTopo', { year: OLD_TOPO_YEAR })}</p>
+            {signedIn && <UploadButton sector={photo.sector} />}
+          </div>
+        )}
         <p className="muted small">{t('edit.topoTip')}</p>
       </aside>
     </>
