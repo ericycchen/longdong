@@ -215,6 +215,7 @@ export const ja: Messages = {
   'shape.versionDeleted': '削除しました。地図は一つ前の版に戻りました',
   'shape.confirmDeleteVersion': 'この版を削除しますか？地図は一つ前の版に戻ります。',
   'shape.deleteVersion': '削除',
+  'shape.mergedCount': '{n} 回の編集',
   'shape.current': '表示中',
   'shape.noVersions': 'まだ編集されていません。自動生成の形です。',
   'shape.history': '変更履歴（{n}）',

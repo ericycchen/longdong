@@ -18,6 +18,7 @@ import { MERGE_RADIUS_M, type PinGroup } from '../map/reportPins'
 import { UploadButton } from '../topo/TopoUpload'
 import { Catalog, useCatalog, type EditItem } from './Catalog'
 import { LatestEdits } from './LatestEdits'
+import { groupVersions } from './versions'
 import { currentText, loadTextEdits, textTarget, useTextEdits, type TextTarget, type TextVersion } from './textEdits'
 import { useMapItem } from './useMapItem'
 import './edit.css'
@@ -210,20 +211,24 @@ function VersionList({ versions, empty, onDelete }: { versions: (MapEditVersion 
   const { profiles } = useSocial()
   const uid = cloud.status === 'signed-in' ? cloud.user?.uid : undefined
   const time = (ms: number) => new Date(ms).toLocaleString(LOCALES[lang], { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  const groups = groupVersions(versions)
   return (
     <>
-      <h2>{t('shape.history', { n: versions.length })}</h2>
+      <h2>{t('shape.history', { n: groups.length })}</h2>
       {versions.length === 0 ? (
         <p className="muted small">{empty}</p>
       ) : (
         <ol className="edit-versions">
-          {[...versions].reverse().map((v, i) => (
+          {groups.map(({ latest: v, members }, i) => (
             <li key={v.id}>
               <span className="edit-version-who">
                 <b>{displayName(profiles, v.uid)}</b>
                 {i === 0 && <span className="edit-badge">{t('shape.current')}</span>}
               </span>
-              <span className="edit-version-time muted">{time(v.createdAt)}</span>
+              <span className="edit-version-time muted">
+                {time(v.createdAt)}
+                {members.length > 1 && ` · ${t('shape.mergedCount', { n: members.length })}`}
+              </span>
               {(v.uid === uid || admin) && (
                 <button type="button" className="link-button danger edit-version-delete" onClick={() => confirm(t('shape.confirmDeleteVersion')) && onDelete(v.id)}>
                   {t('shape.deleteVersion')}

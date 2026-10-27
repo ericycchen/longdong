@@ -301,15 +301,16 @@ if (hoists.length !== 5) throw new Error(`直升機吊掛點應該有 5 處，�
 /**
  * 圖上的文字（地名、道路、步道、海面、紅色的警示）：文字中心的圖上位置，中英日三種語言。
  * tone 是圖上文字的顏色種類，地圖用同樣的配色；產生時檢查圖上該位置有這個顏色的文字，版面改了就停下來。
+ * gps（OpenStreetMap 上建物的位置）：救援資訊圖上的文字不在建物上時，地圖上的位置改用它（at 仍用來檢查版面）。
  * 道路、步道的名稱（有 line）不固定位置：輸出名稱與錨點（kind: 'name'），地圖上沿著離錨點最近的那條線、在畫面上看得到的部分排字（src/map/ScaleMap.tsx）。
  */
 type PlaceTone = 'place' | 'road' | 'trail' | 'sea' | 'warning'
 type NameLine = 'highway' | 'tunnel' | 'road' | 'trail'
 const TONE_COLORS: Record<PlaceTone, string> = { place: '#898989', road: '#004080', trail: '#386808', sea: '#c8c8c8', warning: '#b80008' }
-const PLACES: { zh: string; en: string; ja: string; tone: PlaceTone; at: Pt; line?: NameLine }[] = [
-  { zh: '和美國小', en: 'Ho-Mei School', ja: '和美小学校', tone: 'place', at: [877.5, 996] },
+const PLACES: { zh: string; en: string; ja: string; tone: PlaceTone; at: Pt; line?: NameLine; gps?: Pt }[] = [
+  { zh: '和美國小', en: 'Ho-Mei School', ja: '和美小学校', tone: 'place', at: [877.5, 996], gps: [25.112334, 121.919543] },
   { zh: '和美村', en: 'Ho-Mei Village', ja: '和美村', tone: 'place', at: [541, 1130] },
-  { zh: '西靈巖寺', en: 'Hsilingyan Temple', ja: '西霊巌寺', tone: 'place', at: [1145, 2005.5] },
+  { zh: '西靈巖寺', en: 'Hsilingyan Temple', ja: '西霊巌寺', tone: 'place', at: [1145, 2005.5], gps: [25.105122, 121.921193] },
   { zh: '龍洞南口海洋公園', en: 'Long Dong South Ocean Park', ja: '龍洞南口海洋公園', tone: 'place', at: [838, 2427] },
   { zh: '太平洋', en: 'Pacific Ocean', ja: '太平洋', tone: 'sea', at: [1679, 2305] },
   { zh: '龍洞街', en: 'Long Dong Street', ja: '龍洞街', tone: 'road', at: [547, 1039], line: 'road' },
@@ -1086,7 +1087,10 @@ const scaleMap = {
     feature({ kind: 'parking' }, { type: 'MultiPolygon', coordinates: [...parkingShapes.flat(), ...otherParking].map((r) => [r.map(metersToLngLat)]) }),
     ...parkingLots.map((lot) => feature({ kind: 'parking' }, { type: 'Point', coordinates: metersToLngLat(lot.label) })),
     ...emsPoints.map((at, i) => feature({ kind: 'ems', no: EMS_LOCATIONS[i].no }, { type: 'Point', coordinates: metersToLngLat(at) })),
-    ...PLACES.map(({ zh, en, ja, tone, at, line }) => point({ kind: line ? 'name' : 'place', zh, en, ja, tone, ...(line ? { line } : {}) }, at)),
+    ...PLACES.map(({ zh, en, ja, tone, at, line, gps }) => {
+      const properties = { kind: line ? 'name' : 'place', zh, en, ja, tone, ...(line ? { line } : {}) }
+      return gps ? feature(properties, { type: 'Point', coordinates: [gps[1], gps[0]] }) : point(properties, at)
+    }),
     ...HAZARDS.map((at) => point({ kind: 'hazard' }, at)),
     ...boats.map((at) => point({ kind: 'boat' }, at)),
     ...hoists.map((at) => point({ kind: 'hoist' }, at)),
