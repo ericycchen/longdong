@@ -189,6 +189,7 @@ export const en: Messages = {
   'edit.shortcuts': 'Shortcuts',
   'edit.signIn': 'Sign in to submit changes.',
   'edit.oldTopo': 'Photo from {year} or earlier and out of date. Upload a new one and edit that instead.',
+  'edit.topoEmpty': 'No Topo photo yet',
   'edit.textPlaceholder': 'Write what other climbers should know',
   'edit.viewRoute': 'View route',
   'text.original': 'TOCC original',

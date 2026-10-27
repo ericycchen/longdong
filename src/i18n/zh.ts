@@ -187,6 +187,7 @@ export const zh = {
   'edit.shortcuts': '快捷鍵',
   'edit.signIn': '登入後才能提交修改。',
   'edit.oldTopo': '{year} 年的舊圖，建議不要修改，改上傳新圖再編輯。',
+  'edit.topoEmpty': '還沒有 Topo 照片',
   'edit.textPlaceholder': '寫下對岩友有用的資訊',
   'edit.viewRoute': '看路線頁',
   'text.original': 'TOCC 原文',

@@ -193,6 +193,7 @@ export const ja: Messages = {
   'edit.shortcuts': 'ショートカット',
   'edit.signIn': '投稿するにはログインしてください。',
   'edit.oldTopo': '{year}年以前の古い写真です。新しい写真をアップロードして編集することをおすすめします。',
+  'edit.topoEmpty': 'Topo 写真はまだありません',
   'edit.textPlaceholder': 'クライマーに役立つ情報を書いてください',
   'edit.viewRoute': 'ルートを見る',
   'text.original': 'TOCC の原文',
