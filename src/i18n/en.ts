@@ -679,4 +679,12 @@ export const en: Messages = {
   'topo.delete': 'Delete',
   'topo.deletePoint': 'Delete point',
   'topo.deletePhoto': 'Delete photo',
+  'lab.title': 'Topo lab',
+  'lab.noPhotos': 'No topo photos yet',
+  'lab.route': 'Route',
+  'lab.view': 'View',
+  'lab.save': 'Save',
+  'lab.saved': 'Saved',
+  'lab.loadError': 'Couldn’t read the marks saved on this device ({error}); showing the current version',
+  'lab.saveError': 'Couldn’t save ({error})',
 }

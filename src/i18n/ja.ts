@@ -682,4 +682,12 @@ export const ja: Messages = {
   'topo.delete': '削除',
   'topo.deletePoint': 'ポイントを削除',
   'topo.deletePhoto': '写真を削除',
+  'lab.title': 'Topo ラボ',
+  'lab.noPhotos': 'Topo の写真はまだありません',
+  'lab.route': 'ルート',
+  'lab.view': '表示',
+  'lab.save': '保存',
+  'lab.saved': '保存済み',
+  'lab.loadError': 'この端末に保存したマークを読み込めません（{error}）。現在の版を表示します',
+  'lab.saveError': '保存できません（{error}）',
 }

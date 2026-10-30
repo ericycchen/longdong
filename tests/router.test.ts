@@ -20,6 +20,13 @@ describe('parseLocation', () => {
     expect(parseLocation('/')).toEqual({ name: 'home' })
   })
 
+  it('Topo 實驗室：/topo-lab 是照片清單，/topo-lab/<照片> 開那張照片', () => {
+    expect(parseLocation('/topo-lab')).toEqual({ name: 'topoLab' })
+    expect(parseLocation('/topo-lab/-KJ1-0bGqRU4XvGvp3_L')).toEqual({ name: 'topoLab', id: '-KJ1-0bGqRU4XvGvp3_L' })
+    expect(href.topoLab()).toBe('/topo-lab')
+    expect(href.topoLab('p1')).toBe('/topo-lab/p1')
+  })
+
   it('編輯模式：/edit 是目錄，/edit/<種類>/<項目> 開那個項目（項目 id 可以含 "/" 與 ":"）；不認得的種類回到目錄', () => {
     expect(parseLocation('/edit')).toEqual({ name: 'edit' })
     expect(parseLocation('/edit/map/area:school-gate')).toEqual({ name: 'edit', kind: 'map', id: 'area:school-gate' })

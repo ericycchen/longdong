@@ -1,6 +1,6 @@
 /**
  * 端對端測試（編輯模式）：登入 → 回報 → 去識別副本 → 編輯區域範圍時看到該區的回報 → 地圖編輯（大區域範圍、分區岩壁、刪除版本）→
- * Topo 標記（復原、重做、提交）→ 看 Topo 的 bolt 切換 → 管理頁的所有輸入、搜尋、處理檢舉（電腦版、手機版）。
+ * Topo 標記（復原、重做、提交）→ Topo 實驗室（手機手勢、存在裝置）→ 看 Topo 的 bolt 切換 → 管理頁的所有輸入、搜尋、處理檢舉（電腦版、手機版）。
  * 用 Firebase 模擬器（firebase.e2e.json），不碰正式資料；模擬器載入真正的資料庫規則，一併驗證規則允許這些寫入。
  * 每一項檢查的是「資料庫裡真的有什麼」與「畫面上真的出現什麼」，不是程式內部狀態。
  *
@@ -545,6 +545,78 @@ try {
   await phone.page.waitForTimeout(200)
   check('手機：放大後單指拖曳空白處，照片平移，不多出一個點', (await innerNow()) !== panBefore && (await phoneHandles().count()) === 2)
   await phone.page.screenshot({ path: process.env.PHONE_SHOT ?? 'dist-e2e/phone.png' })
+  // ── Topo 實驗室（/topo-lab）：縮放、平移交給 react-zoom-pan-pinch，只存在這台裝置 ──
+  await phone.page.goto(base + 'topo-lab')
+  await phone.page.waitForSelector('.topo-lab-list')
+  check('Topo 實驗室：照片清單有這張照片', (await phone.page.locator('.topo-lab-list a[href="/topo-lab/e2ephone"]').count()) === 1)
+  await phone.page.goto(base + 'topo-lab/e2ephone')
+  await phone.page.waitForSelector('.topo-lab-stage .topo-frame svg')
+  const labHandles = () => phone.page.locator('.topo-lab-handle')
+  const labFrame = async () => (await phone.page.locator('.topo-lab-stage .topo-frame svg').boundingBox())!
+  const labCenter = async (i: number) => {
+    const b = (await labHandles().nth(i).boundingBox())!
+    return { x: b.x + b.width / 2, y: b.y + b.height / 2 }
+  }
+  const labTool = (label: string) => phone.page.locator('.topo-lab-btn', { hasText: label })
+  const fresh = await labHandles().count()
+  let lb = await labFrame()
+  for (const [fx, fy] of [[0.3, 0.8], [0.35, 0.5], [0.3, 0.2]]) {
+    await phone.page.touchscreen.tap(lb.x + lb.width * fx, lb.y + lb.height * fy)
+    await phone.page.waitForTimeout(400)
+  }
+  check('Topo 實驗室：手指點三下，標了三個點', fresh === 0 && (await labHandles().count()) === 3, `${fresh} → ${await labHandles().count()}`)
+  check('Topo 實驗室：把手夠大（手指按得到）', ((await labHandles().first().boundingBox())!.width) >= 40)
+  const labTransform = () => phone.page.locator('.react-transform-component').getAttribute('style')
+  const t0 = await labTransform()
+  const labBefore = await labCenter(1)
+  await touch('touchStart', [{ ...labBefore, id: 1 }])
+  for (let step = 1; step <= 5; step++) await touch('touchMove', [{ x: labBefore.x + 6 * step, y: labBefore.y + 4 * step, id: 1 }])
+  await touch('touchEnd', [])
+  await phone.page.waitForTimeout(400)
+  const labAfter = await labCenter(1)
+  check('Topo 實驗室：單指拖曳把手，點跟著手指移動，照片不平移', Math.abs(labAfter.x - labBefore.x - 30) < 3 && Math.abs(labAfter.y - labBefore.y - 20) < 3 && (await labHandles().count()) === 3 && (await labTransform()) === t0, `${labAfter.x - labBefore.x},${labAfter.y - labBefore.y}`)
+  const target1 = await labCenter(2)
+  await phone.page.touchscreen.tap(target1.x, target1.y)
+  await phone.page.waitForTimeout(400)
+  check('Topo 實驗室：點一下把手就選取（不會多一個點）', (await phone.page.locator('.topo-lab .topo-handles circle.picked').count()) === 1 && (await labHandles().count()) === 3 && !(await labTool('刪除這個點').isDisabled()))
+  await labTool('刪除這個點').click()
+  check('Topo 實驗室：刪除選取的點', (await labHandles().count()) === 2)
+  await labTool('復原').click()
+  check('Topo 實驗室：復原把點加回來', (await labHandles().count()) === 3)
+  await labTool('儲存').click()
+  const stored = (await phone.page.evaluate(`localStorage.getItem('longdong.topoLab.e2ephone')`)) as string | null
+  const labKey = topoRoutes[0].id.replace(/\//g, ':').replace(/\./g, ',')
+  const storedLine = stored ? (JSON.parse(stored) as Record<string, { line?: string }>)[labKey]?.line : undefined
+  check('Topo 實驗室：儲存在這台裝置（三個點），沒有寫進資料庫', storedLine?.split(' ').length === 3 && (await read('v2/topoEdits/e2ephone')) === null, `${stored}`)
+  /** 把手在照片上的相對位置（0–1），和畫面縮放無關 */
+  const labSpots = async () => {
+    const f = await labFrame()
+    return Promise.all([0, 1, 2].map(async (i) => {
+      const c = await labCenter(i)
+      return [(c.x - f.x) / f.width, (c.y - f.y) / f.height]
+    }))
+  }
+  const shown = await labSpots()
+  await phone.page.reload()
+  await phone.page.waitForSelector('.topo-lab-stage .topo-frame svg')
+  await until(async () => (await labHandles().count()) === 3 || undefined, 5000)
+  const reloaded = await labSpots()
+  check('Topo 實驗室：重新載入後，路線位置完全一致', reloaded.every((p, i) => Math.abs(p[0] - shown[i][0]) < 0.002 && Math.abs(p[1] - shown[i][1]) < 0.002), JSON.stringify({ shown, reloaded }))
+  lb = await labFrame()
+  const lm = { x: lb.x + lb.width / 2, y: lb.y + lb.height / 2 }
+  await touch('touchStart', [{ x: lm.x - 20, y: lm.y, id: 1 }, { x: lm.x + 20, y: lm.y, id: 2 }])
+  for (let step = 1; step <= 6; step++) await touch('touchMove', [{ x: lm.x - 20 - 8 * step, y: lm.y, id: 1 }, { x: lm.x + 20 + 8 * step, y: lm.y, id: 2 }])
+  await touch('touchEnd', [])
+  await phone.page.waitForTimeout(400)
+  const zoomedWidth = (await labFrame()).width
+  check('Topo 實驗室：雙指張開，照片放大；放開時不多出一個點', zoomedWidth > lb.width * 1.5 && (await labHandles().count()) === 3, `${lb.width} → ${zoomedWidth}`)
+  const t2 = await labTransform()
+  await touch('touchStart', [{ ...lm, id: 1 }])
+  for (let step = 1; step <= 5; step++) await touch('touchMove', [{ x: lm.x + 8 * step, y: lm.y + 4 * step, id: 1 }])
+  await touch('touchEnd', [])
+  await phone.page.waitForTimeout(400)
+  check('Topo 實驗室：放大後單指拖曳空白處，照片平移，不多出一個點', (await labTransform()) !== t2 && (await labHandles().count()) === 3)
+  await phone.page.screenshot({ path: process.env.LAB_SHOT ?? 'dist-e2e/topo-lab.png' })
   // 手機的目錄：分區下有「新增 Topo 照片」（手機也能上傳）
   await phone.page.goto(base + 'edit')
   await phone.page.waitForSelector('.edit-catalog')

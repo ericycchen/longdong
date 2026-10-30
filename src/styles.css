@@ -5360,3 +5360,89 @@ button.key-row:disabled {
 .edit-app.narrow.focus .topo-edit-photo {
   padding: 4px;
 }
+
+/* Topo 實驗室（/topo-lab）：手機畫線的手勢實驗，整個畫面給照片 */
+.topo-lab {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+.topo-lab-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+}
+
+.topo-lab-back {
+  min-width: 40px;
+  font-size: 1.6rem;
+  line-height: 1;
+  text-align: center;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.topo-lab-route {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.topo-lab-btn {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  white-space: nowrap;
+}
+
+.topo-lab-btn[aria-pressed='true'],
+.topo-lab-btn.primary:not(:disabled) {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+.topo-lab-btn:disabled {
+  opacity: 0.45;
+}
+
+.topo-lab-bar .topo-lab-btn.primary {
+  margin-left: auto;
+}
+
+.topo-lab-message {
+  margin: 0 8px 6px;
+  color: var(--danger);
+}
+
+.topo-lab-stage {
+  flex: 1;
+  min-height: 0;
+  touch-action: none;
+}
+
+.topo-handles circle.topo-lab-handle {
+  /* 把手的觸控範圍：比看得到的圓大，本身不顯示 */
+  fill: transparent;
+  stroke: none;
+  cursor: move;
+}
+
+.topo-lab-list {
+  padding: 16px;
+}

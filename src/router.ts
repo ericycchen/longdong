@@ -29,6 +29,8 @@ export type Page = (
   | { name: 'topo'; id: string }
   /** 編輯模式：kind 是 map（地圖編輯的對象）、topo（照片 id）、text（說明的對象）；沒有時顯示目錄 */
   | { name: 'edit'; kind?: EditKind; id?: string }
+  /** Topo 實驗室：手機畫線的手勢實驗（只存在這台裝置）；id 是照片 id，沒有時列出照片 */
+  | { name: 'topoLab'; id?: string }
   /** 不是 App 的頁面（例如 /terms.html 等靜態檔案）：站內連結不攔，直接載入時顯示找不到頁面 */
   | { name: 'notFound' }
 ) & { detail?: string }
@@ -62,6 +64,7 @@ export function parseLocation(location: string): Page {
   if (kind === 'bolts') return { name: 'bolts' }
   if (kind === 'checklist') return { name: 'checklist' }
   if (kind === 'topo' && id) return { name: 'topo', id }
+  if (kind === 'topo-lab') return id ? { name: 'topoLab', id } : { name: 'topoLab' }
   if (kind === 'edit') {
     const [editKind, ...itemId] = rest
     return EDIT_KINDS.includes(editKind as EditKind) && itemId.length ? { name: 'edit', kind: editKind as EditKind, id: itemId.join('/') } : { name: 'edit' }
@@ -109,6 +112,8 @@ export const href = {
   topo: (id: string) => `/edit/topo/${id}`,
   /** 分區還沒有 Topo 照片時的新增頁（有照片會轉到第一張） */
   topoAdd: (sectorId: string) => `/edit/topo/${TOPO_ADD_PREFIX}${sectorId}`,
+  /** Topo 實驗室；沒有照片 id 時是照片清單 */
+  topoLab: (id?: string) => (id ? `/topo-lab/${id}` : '/topo-lab'),
 }
 
 /** 舊的分區網址（依位置編號的 ID）要換成的網址，?r= 照留；不是舊網址時回傳 undefined */

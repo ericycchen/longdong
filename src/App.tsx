@@ -35,6 +35,8 @@ const ChecklistPage = lazy(() => import('./pages/ChecklistPage').then((m) => ({ 
 const AdminPage = lazy(() => import('./pages/AdminPage').then((m) => ({ default: m.AdminPage })))
 /** Topo 編輯（電腦版） */
 const EditPage = lazy(() => import('./edit/EditPage').then((m) => ({ default: m.EditPage })))
+/** Topo 實驗室：手機畫線的手勢實驗 */
+const TopoLab = lazy(() => import('./topo/TopoLab').then((m) => ({ default: m.TopoLab })))
 
 export function App() {
   const state = useData()
@@ -221,6 +223,12 @@ function PageView({ page, data, offline }: { page: Page; data: LoadedData; offli
       return (
         <Suspense>
           <EditPage data={data} kind={page.name === 'topo' ? 'topo' : page.kind} id={page.id} />
+        </Suspense>
+      )
+    case 'topoLab':
+      return (
+        <Suspense>
+          <TopoLab key={page.id} data={data} id={page.id} />
         </Suspense>
       )
     case 'notFound':

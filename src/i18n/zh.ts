@@ -676,4 +676,12 @@ export const zh = {
   'topo.delete': '刪除',
   'topo.deletePoint': '刪除這個點',
   'topo.deletePhoto': '刪除照片',
+  'lab.title': 'Topo 實驗室',
+  'lab.noPhotos': '還沒有 Topo 照片',
+  'lab.route': '路線',
+  'lab.view': '檢視',
+  'lab.save': '儲存',
+  'lab.saved': '已儲存',
+  'lab.loadError': '無法讀取這台裝置上存的標記（{error}），改用目前的版本',
+  'lab.saveError': '無法儲存（{error}）',
 }
