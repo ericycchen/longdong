@@ -2,6 +2,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import type { Marks, TopoPhoto } from '../src/topo/model'
+import { textWidth } from '../src/topo/annotate'
 import { TopoLines, type RouteInfo } from '../src/topo/TopoView'
 
 const photo = { id: 'p', sector: 's', uid: 'u', width: 2000, height: 1000, image: 'x', createdAt: 0 } as TopoPhoto
@@ -81,5 +82,48 @@ describe('Topo 標記的自動排版（畫面上的大小）', () => {
   it('縮得很小，太短的路線不標編號；選到的路線仍然標', () => {
     expect(count(render(60), /class="topo-badge"/g)).toBe(0)
     expect(count(render(60, { highlight: 'a' }), /class="topo-badge"/g)).toBe(1)
+  })
+
+  it('同一張 Topo 的編號、bolt、難度名稱、bolt 材質一起排：不論縮放，彼此都不重疊；名稱太長時換行', () => {
+    // 很擠的一面牆：六條路線靠在一起，名稱很長，每條都有 bolt
+    const crowded: Marks = {}
+    const crowdedInfo = new Map<string, RouteInfo>()
+    const crowdedLabels = new Map<string, string>()
+    for (let i = 0; i < 6; i++) {
+      const x = 2000 + i * 900
+      crowded[`r${i}`] = { line: [[x, 9200], [x + 150, 5000], [x, 900]], bolts: { B01: [x + 100, 7500], B02: [x + 140, 4500], A01: [x, 1200] } }
+      crowdedLabels.set(`r${i}`, String(i + 1))
+      crowdedInfo.set(`r${i}`, { kind: i % 2 ? 'sport' : 'other', grade: '5.11c', name: `一條名字非常非常長的路線${i}`, bolts: { B01: '316-TW · 2007', B02: 'Ti-U · 2021', A01: '316-TW · 2019' } })
+    }
+    const ids = Object.keys(crowded)
+    for (const k of [0.4, 0.8, 1.5, 3]) {
+      const html = renderToStaticMarkup(createElement('svg', null, createElement(TopoLines, { photo, marks: crowded, labels: crowdedLabels, k, info: crowdedInfo, highlight: 'r2', bolts: ids })))
+      const boxes: { x: number; y: number; w: number; h: number; what: string }[] = []
+      for (const m of html.matchAll(/<rect x="([\d.-]+)" y="([\d.-]+)" width="([\d.]+)" height="([\d.]+)"/g)) {
+        const [x, y, w, h] = m.slice(1).map(Number)
+        boxes.push({ x, y, w, h, what: 'rect' })
+      }
+      for (const m of html.matchAll(/<tspan x="([\d.-]+)" y="([\d.-]+)"[^>]*>([^<]+)</g)) {
+        const [cx, cy] = [Number(m[1]), Number(m[2])]
+        const w = textWidth(m[3], 10) * k
+        const h = 12.5 * k
+        boxes.push({ x: cx - w / 2, y: cy - h / 2, w, h, what: m[3] })
+      }
+      expect(boxes.length).toBeGreaterThan(6)
+      for (let a = 0; a < boxes.length; a++)
+        for (let b = a + 1; b < boxes.length; b++) {
+          const [p, q] = [boxes[a], boxes[b]]
+          const hit = p.x < q.x + q.w - 0.01 && q.x < p.x + p.w - 0.01 && p.y < q.y + q.h - 0.01 && q.y < p.y + p.h - 0.01
+          expect(hit, `k=${k}: ${p.what} 和 ${q.what} 重疊`).toBe(false)
+        }
+      // 擠的時候換方向、換行，盡量都顯示：每條路線都有難度，大部分有名稱，bolt 的材質放不下一行時分兩行
+      const lines = [...html.matchAll(/<tspan[^>]*>([^<]+)</g)].map((m) => m[1])
+      if (k === 1.5) {
+        expect(lines.filter((t) => t === '5.11c')).toHaveLength(6)
+        expect(lines.filter((t) => t.startsWith('一條名字')).length).toBeGreaterThanOrEqual(5)
+        expect(lines.some((t) => t === '的路線1')).toBe(true)
+      }
+      if (k === 3) expect(lines).toContain('2007')
+    }
   })
 })

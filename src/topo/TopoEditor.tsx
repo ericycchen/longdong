@@ -261,29 +261,33 @@ function Sheet({ label, onClose, children }: { label: string; onClose: () => voi
 const LOUPE_PX = 128
 const LOUPE_ZOOM = 2.5
 
-/** 放大鏡：at 是中心（萬分比），span 是看得到的寬度（照片像素）；right 時放在右上（手指在左半邊） */
+/** 手指擋住的範圍：放大鏡的下緣離手指這麼遠（螢幕像素） */
+const LOUPE_GAP = 36
+
+/** 放大鏡：at 是中心（萬分比），span 是看得到的寬度（照片像素）；x、y 是放大鏡左上角在照片區的位置 */
 interface LoupeState {
   at: Point
   span: number
-  right: boolean
+  x: number
+  y: number
 }
 
 /**
- * 放大鏡：手指按住瞄準、拖曳點時，手指底下那一塊放大顯示在照片上方的角落（不被手指擋住），
+ * 放大鏡：手指按住瞄準、拖曳點時，手指底下那一塊放大顯示在手指正上方（上面放不下時放在旁邊），
  * 十字中心就是點會放的位置；也畫出這條路線目前的線與點。
  */
-function Loupe({ photo, loupe, line }: { photo: TopoPhoto; loupe: LoupeState; line?: Point[] }) {
+function Loupe({ photo, loupe, line, kind }: { photo: TopoPhoto; loupe: LoupeState; line?: Point[]; kind?: string }) {
   const [cx, cy] = px(photo, loupe.at)
   const span = loupe.span
   const k = span / LOUPE_PX
   const pts = (line ?? []).map((p) => px(photo, p) as Pt)
   return (
-    <div className={`topo-loupe${loupe.right ? ' right' : ''}`} aria-hidden>
+    <div className={`topo-loupe kind-${kind ?? 'other'}`} style={{ left: loupe.x, top: loupe.y }} aria-hidden>
       <svg viewBox={`${cx - span / 2} ${cy - span / 2} ${span} ${span}`} width={LOUPE_PX} height={LOUPE_PX}>
         <image href={imageUrl(photo.image)} x={0} y={0} width={photo.width} height={photo.height} />
         {pts.length >= 2 && <path className="topo-loupe-line" d={smoothPath(pts)} strokeWidth={2 * k} />}
         {pts.map(([x, y], i) => (
-          <circle key={i} className="topo-loupe-point" cx={x} cy={y} r={6 * k} strokeWidth={1.5 * k} />
+          <circle key={i} className="topo-loupe-point" cx={x} cy={y} r={4 * k} />
         ))}
         <path
           className="topo-loupe-cross"
@@ -395,6 +399,8 @@ function Editor({
   const [sheet, setSheet] = useState<'more'>()
   /** 手機版：下面路線清單的高度（拖曳分隔線調整；undefined 是預設） */
   const [listHeight, setListHeight] = useState<number>()
+  /** 手機版：照片佔滿整個畫面（路線清單收起來） */
+  const [photoOnly, setPhotoOnly] = useState(false)
   /** 手機版：放大鏡（按住瞄準、拖曳點時） */
   const [loupe, setLoupe] = useState<LoupeState>()
   /** 手機版：自動縮放到的地方（選路線、選點、繼續畫、完成） */
@@ -627,7 +633,16 @@ function Editor({
     const r = svg.getBoundingClientRect()
     const c = crop ?? FULL_CROP
     const area = svg.closest('.topo-phone-photo')?.getBoundingClientRect() ?? r
-    setLoupe({ at: pointAt(e, svg), span: (LOUPE_PX * px(photo, [c.w, 0])[0]) / r.width / LOUPE_ZOOM, right: e.clientX - area.left < area.width / 2 })
+    const fx = e.clientX - area.left
+    const fy = e.clientY - area.top
+    const clampX = (x: number) => Math.max(4, Math.min(area.width - LOUPE_PX - 4, x))
+    const above = fy - LOUPE_GAP - LOUPE_PX
+    const [x, y] =
+      above >= 4
+        ? [clampX(fx - LOUPE_PX / 2), above]
+        : // 手指在照片上緣：放在手指旁邊（左半邊放右邊，右半邊放左邊）
+          [clampX(fx < area.width / 2 ? fx + LOUPE_GAP : fx - LOUPE_GAP - LOUPE_PX), Math.max(4, fy - LOUPE_PX / 2)]
+    setLoupe({ at: pointAt(e, svg), span: (LOUPE_PX * px(photo, [c.w, 0])[0]) / r.width / LOUPE_ZOOM, x, y })
   }
 
   // 手機版按住瞄準：手指按住不動一下出現放大鏡，滑動對準，放開才放點（點一下照樣直接放）
@@ -824,17 +839,17 @@ function Editor({
     mode !== 'crop' &&
     selected && (
       <>
-        <g className="topo-handles">
+        <g className={`topo-handles kind-${info?.get(selected)?.kind ?? 'other'}`}>
           {current.line?.map((p, i) => {
             const [x, y] = px(photo, p)
             return (
               <circle
                 key={`l${i}`}
-                className={[i === 0 && 'start', pickedLive?.kind === 'line' && pickedLive.index === i && 'picked'].filter(Boolean).join(' ') || undefined}
+                className={pickedLive?.kind === 'line' && pickedLive.index === i ? 'picked' : undefined}
                 cx={x}
                 cy={y}
-                r={(coarse ? 7 : 5) * k}
-                strokeWidth={1.5 * k}
+                r={(pickedLive?.kind === 'line' && pickedLive.index === i ? 6 : 4) * k}
+                strokeWidth={2 * k}
                 // 手指：按下的是外面那圈透明的 .topo-hits（比看得到的點大）
                 pointerEvents={coarse ? 'none' : undefined}
                 {...(coarse ? {} : grab({ kind: 'line', index: i, at: p }))}
@@ -1098,6 +1113,15 @@ function Editor({
             <CloseButton />
             <button
               type="button"
+              className="topo-float-btn topo-phone-full"
+              aria-label={t('topo.fullscreen')}
+              aria-pressed={photoOnly}
+              onClick={() => setPhotoOnly((v) => !v)}
+            >
+              <Icon d={photoOnly ? 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5' : 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5'} />
+            </button>
+            <button
+              type="button"
               className="topo-float-btn primary topo-phone-submit"
               disabled={!changed || needRoute || busy || !!preview}
               onClick={() => void submit()}
@@ -1105,7 +1129,7 @@ function Editor({
               {busy ? t('topo.submitting') : saved && !changed ? t('topo.saved') : t('topo.submit')}
             </button>
           </div>
-          {loupe && <Loupe photo={photo} loupe={loupe} line={current.line} />}
+          {loupe && <Loupe photo={photo} loupe={loupe} line={current.line} kind={selected && info?.get(selected)?.kind} />}
           {mode === 'bolt' && !preview && <div className="topo-float-chips">{positionsRow}</div>}
           {floating && (
             <div className="topo-float" role="toolbar" aria-label={t('topo.toolbar')}>
@@ -1113,8 +1137,8 @@ function Editor({
             </div>
           )}
         </div>
-        <PaneSplit onResize={setListHeight} />
-        <div className="topo-phone-list" style={listHeight ? { height: listHeight } : undefined}>
+        {!photoOnly && <PaneSplit onResize={setListHeight} />}
+        <div className="topo-phone-list" hidden={photoOnly} style={listHeight ? { height: listHeight } : undefined}>
           {preview && (
             <div className="topo-edit-bar notice">
               <span>{t('topo.previewing', { time: relativeTime(new Date(preview.createdAt).toISOString(), t), name: displayName(profiles, preview.uid) })}</span>

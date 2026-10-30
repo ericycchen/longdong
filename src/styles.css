@@ -4830,13 +4830,16 @@ dialog.topo-full[open] {
   user-select: none;
 }
 
-/* 標記的風格：深紅色的平滑曲線，起點一個圓點；編號、anchor 是紅色的圓角牌，bolt 是藍色的圓角牌；說明是白字加深色描邊 */
+/* 標記的風格：深紅色的平滑曲線，起點一個圓點；編號、anchor 是紅色的圓角牌，bolt 是藍色的圓角牌（都沒有白框）；說明是白字加深色描邊 */
 .topo-route {
   --topo-line: #c8102e;
   --topo-pill: #c8102e;
 }
 
-.topo-route.on {
+/* 編輯時的點、放大鏡：和選到的路線同色 */
+.topo-route.on,
+.topo-handles,
+.topo-loupe {
   --topo-line: #e11d2e;
   --topo-pill: #e11d2e;
 }
@@ -4847,7 +4850,9 @@ dialog.topo-full[open] {
   --topo-pill: #1565c0;
 }
 
-.topo-route.kind-sport.on {
+.topo-route.kind-sport.on,
+.topo-handles.kind-sport,
+.topo-loupe.kind-sport {
   --topo-line: #1e7bff;
   --topo-pill: #1e7bff;
 }
@@ -4877,7 +4882,7 @@ dialog.topo-full[open] {
 
 .topo-start {
   fill: var(--topo-line);
-  stroke: #fff;
+  stroke: none;
 }
 
 g.topo-route.link {
@@ -4902,7 +4907,7 @@ g.topo-route.link:focus-visible .topo-halo {
 
 .topo-badge rect {
   fill: var(--topo-pill);
-  stroke: #fff;
+  stroke: none;
 }
 
 .topo-badge text {
@@ -4913,8 +4918,7 @@ g.topo-route.link:focus-visible .topo-halo {
 
 .topo-bolt rect {
   fill: #1ea0e6;
-  stroke: #fff;
-  stroke-width: 1px;
+  stroke: none;
 }
 
 .topo-bolt.anchor rect {
@@ -5165,10 +5169,9 @@ button.key-row:disabled {
 
 .topo-handles circle,
 .topo-handles rect {
-  /* 空心的圈：岩壁看得到；外面一圈暗邊，淺色的岩壁上也看得清楚 */
-  fill: transparent;
-  stroke: #fff;
-  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.9));
+  /* 實心、和線同色的點（起點也一樣），線不會從點的中間穿過；沒有白框 */
+  fill: var(--topo-line);
+  stroke: none;
   cursor: move;
 }
 
@@ -5187,11 +5190,6 @@ button.key-row:disabled {
   fill: transparent;
   stroke: none;
   pointer-events: all;
-}
-
-.topo-handles circle.start {
-  fill: transparent;
-  stroke: #ffd400;
 }
 
 .topo-fork circle {
@@ -5357,10 +5355,9 @@ button.key-row:disabled {
   -webkit-touch-callout: none;
 }
 
-.topo-handles circle.picked,
-.topo-handles rect.bolt.picked {
-  fill: rgba(255, 90, 54, 0.25);
-  stroke: var(--brand);
+.topo-handles circle.picked {
+  /* 選到的點大一點、外面一圈黃色 */
+  stroke: #ffd400;
 }
 
 .topo-handles rect.bolt.picked {
@@ -5697,6 +5694,15 @@ dialog.topo-phone::backdrop {
   pointer-events: auto;
 }
 
+/* 全畫面按鈕靠右，緊鄰提交 */
+.topo-phone-full {
+  margin: 0 8px 0 auto;
+}
+
+.topo-phone-list[hidden] {
+  display: none;
+}
+
 /* 沒有照片的畫面（載入中、上傳）：上面一排照常排在畫面裡 */
 .topo-phone > .topo-phone-top {
   position: static;
@@ -5877,11 +5883,9 @@ dialog.topo-phone::backdrop {
   overflow: visible;
 }
 
-/* 放大鏡：在照片上方的角落（避開手指），十字中心是點的位置 */
+/* 放大鏡：在手指正上方（位置由程式算），十字中心是點的位置 */
 .topo-loupe {
   position: absolute;
-  top: calc(60px + env(safe-area-inset-top));
-  left: 8px;
   z-index: 4;
   width: 128px;
   height: 128px;
@@ -5893,24 +5897,18 @@ dialog.topo-phone::backdrop {
   pointer-events: none;
 }
 
-.topo-loupe.right {
-  right: 8px;
-  left: auto;
-}
-
 .topo-loupe svg {
   display: block;
 }
 
 .topo-loupe-line {
   fill: none;
-  stroke: var(--topo-line, #ff5a36);
+  stroke: var(--topo-line);
   stroke-linecap: round;
 }
 
 .topo-loupe-point {
-  fill: transparent;
-  stroke: #fff;
+  fill: var(--topo-line);
 }
 
 .topo-loupe-cross {

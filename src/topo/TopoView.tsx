@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState, type ReactNode, type SVGProps } from 'react'
 import { navigate } from '../router'
 import type { Route } from '../data/schema'
-import { centeredBox, pathLength, Placer, pointAlong, smoothPath, textWidth, type Box, type Pt } from './annotate'
+import { centeredBox, pathLength, Placer, pointAlong, smoothPath, textWidth, wrapText, type Box, type Pt } from './annotate'
 import { drawnRuns, ownRuns } from './lines'
 import { FULL_CROP, imageUrl, SCALE, type Crop, type Marks, type Point, type TopoPhoto } from './model'
 
@@ -111,11 +111,13 @@ const NAME_LINE_PX = 240
 const EDIT_POINT_PX = 12
 /** 編號牌放在線上的候選位置（占全長的比例）：先放正中間，不行再往兩邊找 */
 const LABEL_SPOTS = [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82]
+/** 說明文字太長時換行的寬度（螢幕像素）：先試一行，再試這些寬度 */
+const WRAP_PX = [90, 60]
 
 interface Plan {
   pill?: Box
   note?: { box: Box; lines: string[] }
-  bolts: { pos: string; at: Pt; anchor: boolean; label: string; pill: Box; note?: { box: Box; text: string } }[]
+  bolts: { pos: string; at: Pt; anchor: boolean; label: string; pill: Box; note?: { box: Box; lines: string[] } }[]
 }
 
 /**
@@ -170,8 +172,13 @@ export function TopoLines({
   /** 編號牌放的線：獨有線段中最長的一段（分岔的路線標在自己的岔線上）；整條都和別的路線共用時用整條 */
   const labelLine = (id: string, line: Pt[]): Pt[] => own.get(id)!.reduce<Pt[] | undefined>((a, b) => (!a || pathLength(b) > pathLength(a) ? b : a), undefined) ?? line
 
-  // ── 自動排版：依優先順序放牌子，放不下的藏起來 ──
-  const placer = new Placer({ x: bx, y: by, w: bw, h: bh }, 3 * k)
+  // ── 自動排版：同一張 Topo 的所有牌子、說明一起排，互不重疊；依優先順序放，放不下的藏起來 ──
+  // 位置固定的（bolt）先放，可以沿著線移動的編號牌其次，說明文字最後（換方向、換行，盡量不壓到線）
+  const placer = new Placer(
+    { x: bx, y: by, w: bw, h: bh },
+    3 * k,
+    drawn.map(([, line]) => line),
+  )
   if (editing && highlight) {
     const r = EDIT_POINT_PX * k
     for (const p of marks[highlight]?.line ?? []) {
@@ -181,27 +188,7 @@ export function TopoLines({
   }
   const plan = new Map<string, Plan>(priority.map((id) => [id, { bolts: [] }]))
   const length = new Map(priority.map((id) => [id, (lineOf(id) ? pathLength(lineOf(id)!) : 0) / k]))
-  // 1. 路線編號牌
-  for (const id of priority) {
-    const text = labels.get(id)
-    if (!text) continue
-    const line = lineOf(id)
-    const w = (textWidth(text, PILL_FONT) + 14) * k
-    const h = PILL_H * k
-    let spots: Box[]
-    if (line && line.length >= 2) {
-      if (id !== highlight && length.get(id)! < MIN_LABEL_LINE_PX) continue
-      const on = labelLine(id, line)
-      spots = LABEL_SPOTS.map((f) => centeredBox(pointAlong(on, f), w, h))
-    } else {
-      // 沒有線段：標在最下面的 bolt 旁邊
-      const low = lowestBolt(photo, marks[id].bolts)
-      if (!low) continue
-      spots = [centeredBox([low[0], low[1] + h], w, h), centeredBox([low[0], low[1] - h], w, h)]
-    }
-    plan.get(id)!.pill = placer.place(spots, id === highlight && !editing)
-  }
-  // 2. bolt、anchor 的牌子
+  // 1. bolt、anchor 的牌子（位置固定）
   for (const id of priority) {
     if (!bolts.includes(id)) continue
     for (const [pos, p] of Object.entries(marks[id].bolts ?? {}).sort(([a], [b]) => a.localeCompare(b))) {
@@ -213,39 +200,97 @@ export function TopoLines({
       if (pill) plan.get(id)!.bolts.push({ pos, at, anchor, label, pill })
     }
   }
+  // 2. 路線編號牌
+  for (const id of priority) {
+    const text = labels.get(id)
+    if (!text) continue
+    const line = lineOf(id)
+    const w = (textWidth(text, PILL_FONT) + 14) * k
+    const h = PILL_H * k
+    let spots: Box[]
+    if (line && line.length >= 2) {
+      if (id !== highlight && length.get(id)! < MIN_LABEL_LINE_PX) continue
+      const on = labelLine(id, line)
+      const along = LABEL_SPOTS.map((f) => pointAlong(on, f))
+      spots = along.map((p) => centeredBox(p, w, h))
+      // 選到的路線一定要標：線上都沒空位時放在線的旁邊
+      if (id === highlight) spots.push(...along.flatMap(([x, y]) => [centeredBox([x + w / 2 + h / 2, y], w, h), centeredBox([x - w / 2 - h / 2, y], w, h)]))
+    } else {
+      // 沒有線段：標在最下面的 bolt 旁邊
+      const low = lowestBolt(photo, marks[id].bolts)
+      if (!low) continue
+      spots = [centeredBox([low[0], low[1] + h], w, h), centeredBox([low[0], low[1] - h], w, h)]
+    }
+    plan.get(id)!.pill = placer.place(spots, id === highlight && !editing)
+  }
   // 3. 多的說明：編號牌下面的難度與名稱、bolt 旁邊的材質與年份（空間夠才顯示）
   for (const id of editing ? [] : priority) {
     const entry = plan.get(id)!
     const i = info?.get(id)
     if (entry.pill && i) {
       const len = length.get(id)!
-      const lines = [id === highlight || len >= GRADE_LINE_PX ? i.grade : undefined, id === highlight || len >= NAME_LINE_PX ? i.name : undefined].filter((x): x is string => !!x)
-      for (const shown of [lines, lines.slice(0, 1)]) {
-        if (shown.length === 0) break
-        const w = Math.max(...shown.map((t) => textWidth(t, NOTE_FONT))) * k
-        const h = shown.length * NOTE_LINE * k
-        const cx = entry.pill.x + entry.pill.w / 2
-        const box = placer.place([
-          { x: cx - w / 2, y: entry.pill.y + entry.pill.h + 4 * k, w, h },
-          { x: cx - w / 2, y: entry.pill.y - h - 4 * k, w, h },
-        ])
-        if (box) {
-          entry.note = { box, lines: shown }
-          break
-        }
+      const grade = id === highlight || len >= GRADE_LINE_PX ? i.grade : undefined
+      const name = id === highlight || len >= NAME_LINE_PX ? i.name : undefined
+      // 版本：難度＋名稱一行、名稱換行，最後只有難度
+      const versions: string[][] = []
+      const add = (v: (string | undefined)[]) => {
+        const lines = v.filter((x): x is string => !!x)
+        if (lines.length && !versions.some((o) => o.join('|') === lines.join('|'))) versions.push(lines)
       }
+      add([grade, name])
+      for (const wpx of WRAP_PX) add([grade, ...(name ? wrapText(name, NOTE_FONT, wpx) : [])])
+      add([grade])
+      const pill = entry.pill
+      const got = placer.placeFirst(
+        versions.map((lines) => {
+          const w = Math.max(...lines.map((t) => textWidth(t, NOTE_FONT))) * k
+          const h = lines.length * NOTE_LINE * k
+          const cx = pill.x + pill.w / 2
+          const cy = pill.y + pill.h / 2
+          const g = 4 * k
+          return {
+            value: lines,
+            candidates: [
+              { x: cx - w / 2, y: pill.y + pill.h + g, w, h },
+              { x: cx - w / 2, y: pill.y - h - g, w, h },
+              { x: pill.x + pill.w + g, y: cy - h / 2, w, h },
+              { x: pill.x - w - g, y: cy - h / 2, w, h },
+              { x: pill.x + pill.w + g, y: pill.y + pill.h + g, w, h },
+              { x: pill.x - w - g, y: pill.y + pill.h + g, w, h },
+              { x: pill.x + pill.w + g, y: pill.y - h - g, w, h },
+              { x: pill.x - w - g, y: pill.y - h - g, w, h },
+            ],
+          }
+        }),
+        true,
+      )
+      if (got) entry.note = { box: got.box, lines: got.value }
     }
     for (const b of entry.bolts) {
       const text = i?.bolts[b.pos]
       if (!text) continue
-      const w = textWidth(text, NOTE_FONT) * k
-      const h = NOTE_LINE * k
-      const y = b.at[1] - h / 2
-      const box = placer.place([
-        { x: b.pill.x + b.pill.w + 4 * k, y, w, h },
-        { x: b.pill.x - w - 4 * k, y, w, h },
-      ])
-      if (box) b.note = { box, text }
+      // 一行放不下時，材質與年份分兩行
+      const versions = [[text], ...WRAP_PX.map((wpx) => wrapText(text, NOTE_FONT, wpx))].filter((v, j, all) => all.findIndex((o) => o.join('|') === v.join('|')) === j)
+      const g = 4 * k
+      const got = placer.placeFirst(
+        versions.map((lines) => {
+          const w = Math.max(...lines.map((t) => textWidth(t, NOTE_FONT))) * k
+          const h = lines.length * NOTE_LINE * k
+          const y = b.at[1] - h / 2
+          const cx = b.at[0] - w / 2
+          return {
+            value: lines,
+            candidates: [
+              { x: b.pill.x + b.pill.w + g, y, w, h },
+              { x: b.pill.x - w - g, y, w, h },
+              { x: cx, y: b.pill.y + b.pill.h + g, w, h },
+              { x: cx, y: b.pill.y - h - g, w, h },
+            ],
+          }
+        }),
+        true,
+      )
+      if (got) b.note = { box: got.box, lines: got.value }
     }
   }
 
@@ -308,8 +353,12 @@ export function TopoLines({
                   {b.label}
                 </text>
                 {b.note && (
-                  <text className="topo-note" x={b.note.box.x} y={b.note.box.y + b.note.box.h / 2} fontSize={NOTE_FONT * k} strokeWidth={2.5 * k} dominantBaseline="central">
-                    {b.note.text}
+                  <text className="topo-note" textAnchor="middle" fontSize={NOTE_FONT * k} strokeWidth={2.5 * k}>
+                    {b.note.lines.map((t, i) => (
+                      <tspan key={i} x={b.note!.box.x + b.note!.box.w / 2} y={b.note!.box.y + (i + 0.5) * NOTE_LINE * k} dominantBaseline="central">
+                        {t}
+                      </tspan>
+                    ))}
                   </text>
                 )}
               </g>

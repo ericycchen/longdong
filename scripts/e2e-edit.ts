@@ -529,6 +529,14 @@ try {
   check('手機：「畫線」「Bolt」是圖案按鈕（不佔照片的地方）', (await phone.page.locator('.topo-float .topo-float-btn span').count()) === 0)
   const toolSizes = await phone.page.locator('.topo-float .topo-float-btn').evaluateAll((els) => els.map((e) => Math.round(Math.min(e.getBoundingClientRect().width, e.getBoundingClientRect().height))))
   check('手機：浮動按鈕都夠大（至少 44 像素）', toolSizes.length >= 3 && toolSizes.every((v) => v >= 44), toolSizes.join(','))
+  // 全畫面：路線清單收起來，照片佔滿整個畫面；再按一次回來
+  const fullBtn = phone.page.locator('.topo-phone-full')
+  await fullBtn.click()
+  const fullPhoto = (await phone.page.locator('.topo-phone-photo').boundingBox())!
+  const viewH = phone.page.viewportSize()!.height
+  check('手機：照片可以全畫面（路線清單收起來）', !(await phone.page.locator('.topo-phone-list').isVisible()) && fullPhoto.height >= viewH - 2 && (await fullBtn.getAttribute('aria-pressed')) === 'true', `${fullPhoto.height}/${viewH}`)
+  await fullBtn.click()
+  check('手機：再按一次全畫面，路線清單回來', (await phone.page.locator('.topo-phone-list').isVisible()) && (await phone.page.locator('.topo-phone-photo').boundingBox())!.height < viewH - 60)
   // 點清單選路線
   await phone.page.locator('.topo-phone-list .topo-route-row', { has: phone.page.locator('.topo-route-no', { hasText: new RegExp(`^${topoRoutes[0].number}$`) }) }).click()
   check('手機：點清單選路線', (await phone.page.locator('.topo-phone-list .topo-route-row.on .topo-route-no').textContent()) === topoRoutes[0].number)
@@ -551,7 +559,11 @@ try {
   pb = await phoneFrame()
   for (const [fx, fy] of [[0.3, 0.8], [0.35, 0.5], [0.3, 0.2]]) await phone.page.touchscreen.tap(pb.x + pb.width * fx, pb.y + pb.height * fy)
   check('手機：用手指點三下，標了三個點', (await phoneHandles().count()) === 3)
-  check('手機：看得到的點是小小的空心圈（不擋岩壁），手指按得到的範圍比較大', ((await phoneHandles().first().boundingBox())!.width) <= 20 && ((await phone.page.locator('.topo-hits circle').first().boundingBox())!.width) >= 40 && (await phoneHandles().first().evaluate((el) => getComputedStyle(el).fill)) === 'rgba(0, 0, 0, 0)')
+  const lineColor = await phone.page.locator('.topo-route.on .topo-line').first().evaluate((el) => getComputedStyle(el).stroke)
+  const handleStyles = await phoneHandles().evaluateAll((els) => els.map((el) => `${getComputedStyle(el).fill}|${getComputedStyle(el).stroke}`))
+  check('手機：點是小小的實心點、和線同色（起點也一樣、沒有白框），手指按得到的範圍比較大', ((await phoneHandles().first().boundingBox())!.width) <= 12 && ((await phone.page.locator('.topo-hits circle').first().boundingBox())!.width) >= 40 && handleStyles.every((v) => v === `${lineColor}|none`), `${lineColor} / ${handleStyles.join(' ')}`)
+  const whiteFrames = await phone.page.locator('.topo-badge rect, .topo-bolt rect, .topo-start, .topo-handles circle').evaluateAll((els) => els.filter((el) => /255, 255, 255|#fff/.test(getComputedStyle(el).stroke)).length)
+  check('手機：所有的標記（編號、bolt、起點、點）都沒有白框', whiteFrames === 0, `${whiteFrames}`)
   check('手機：編輯時線上不顯示難度、名稱（不和點疊在一起）', (await phone.page.locator('.topo-phone .topo-note').count()) === 0)
   // 按住不動：出現放大鏡，滑動對準，放開才放點（只放一個）
   pb = await phoneFrame()
@@ -561,11 +573,13 @@ try {
   await phone.page.waitForTimeout(400)
   const loupeShown = await phone.page.locator('.topo-loupe').isVisible()
   for (let step = 1; step <= 4; step++) await touch('touchMove', [{ x: aimFrom.x + 6 * step, y: aimFrom.y + 3 * step, id: 1 }])
+  await phone.page.waitForTimeout(100)
   const loupeBox = (await phone.page.locator('.topo-loupe').boundingBox())!
   await touch('touchEnd', [])
   await phone.page.waitForTimeout(400)
   const aimedAt = await phoneHandles().evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }))
-  check('手機：按住照片出現放大鏡（在角落，不在手指底下），滑動後放開，點放在放開的位置，只多一個點', loupeShown && Math.hypot(loupeBox.x + loupeBox.width / 2 - aimTo.x, loupeBox.y + loupeBox.height / 2 - aimTo.y) > 100 && aimedAt.length === 4 && aimedAt.some((c) => Math.hypot(c.x - aimTo.x, c.y - aimTo.y) < 4) && (await phone.page.locator('.topo-loupe').count()) === 0, `${aimedAt.length} 個點`)
+  const loupeGap = aimTo.y - (loupeBox.y + loupeBox.height)
+  check('手機：按住照片出現放大鏡（在手指正上方、不被手指擋住），滑動後放開，點放在放開的位置，只多一個點', loupeShown && Math.abs(loupeBox.x + loupeBox.width / 2 - aimTo.x) < 10 && loupeGap >= 24 && loupeGap <= 60 && aimedAt.length === 4 && aimedAt.some((c) => Math.hypot(c.x - aimTo.x, c.y - aimTo.y) < 4) && (await phone.page.locator('.topo-loupe').count()) === 0, `${aimedAt.length} 個點，放大鏡離手指 ${loupeGap}，水平差 ${loupeBox.x + loupeBox.width / 2 - aimTo.x}`)
   await phone.page.keyboard.press('z')
   // 單指拖曳把手：移動把手，不是捲動頁面、平移照片
   const before = await centerOf(1)
