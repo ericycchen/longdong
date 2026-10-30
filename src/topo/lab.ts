@@ -1,4 +1,4 @@
-import { decodeEdit, encodeMarks, sameMarks, type Marks, type StoredRoutes } from './model'
+import { decodeEdit, encodeMarks, type Marks, type StoredRoutes } from './model'
 
 /**
  * Topo 實驗室（/topo-lab）：只在這台裝置上試畫，不上傳。手勢交給 react-zoom-pan-pinch，
@@ -14,9 +14,9 @@ export interface History {
 
 export const startHistory = (marks: Marks): History => ({ past: [], present: marks, future: [] })
 
-/** 換成新的標記；和目前相同時不留一筆空的復原 */
+/** 換成新的標記；和目前相同時不留一筆空的復原（只有一點的線也算數：sameMarks 依存檔格式比較，會忽略它） */
 export function commit(h: History, next: Marks): History {
-  if (sameMarks(h.present, next)) return h
+  if (JSON.stringify(h.present) === JSON.stringify(next)) return h
   return { past: [...h.past, h.present], present: next, future: [] }
 }
 

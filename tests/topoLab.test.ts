@@ -46,6 +46,12 @@ describe('Topo 實驗室：復原、重做', () => {
     expect(commit(undo(h2), {}).future).toEqual([])
   })
 
+  it('第一個點（只有一點的線）也算一步修改', () => {
+    const h = commit(startHistory({}), { [A]: { line: [toPoint(0.3, 0.8)] } })
+    expect(h.present[A].line).toHaveLength(1)
+    expect(h.past).toHaveLength(1)
+  })
+
   it('沒有變化的修改不留一筆復原', () => {
     const h = commit(startHistory(marks), structuredClone(marks))
     expect(h.past).toHaveLength(0)
