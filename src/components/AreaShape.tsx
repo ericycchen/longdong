@@ -136,8 +136,8 @@ export function AreaShape({ area, className }: { area: Area; className?: string 
 }
 
 /** 分區頁的範圍是這個分區岩壁的幾倍（看得到附近其他的牆）；至少這麼寬（公尺） */
-const NEARBY_SPREAD = 2.4
-const NEARBY_MIN_M = 60
+const NEARBY_SPREAD = 1.7
+const NEARBY_MIN_M = 40
 /** 路線頁只畫這個分區的岩壁：至少這麼寬（公尺） */
 const SINGLE_MIN_M = 15
 

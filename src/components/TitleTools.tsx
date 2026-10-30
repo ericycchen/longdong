@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import type { LoadedData } from '../data/dataset'
 import type { Area, Route, Sector } from '../data/schema'
 import { HistoryView, useDismiss, useEditOptions, useHistory, type ToolScope } from '../edit/PageTools'
@@ -12,7 +12,7 @@ import { ShareItems } from './ShareItems'
  * 區域、分區、路線頁標題卡右上的工具：收藏、回報位置（都是圖示），「更多」選單：分享、記錄攀登（路線）、編輯、
  * 修改記錄（電腦版、有修改記錄才顯示）。收藏與記錄攀登要登入。
  * favoriteId：收藏的對象（路線、區域或分區的 ID；固定點不能收藏時 undefined）；report：回報位置的對象；
- * onTick：打開記錄攀登的視窗（只有路線）。
+ * onTick：打開記錄攀登的視窗（只有路線）；info：選單上方的資料（手機的路線頁：安全與拉測、首攀）。
  */
 export function TitleTools({
   data,
@@ -22,6 +22,7 @@ export function TitleTools({
   signedIn,
   scope,
   onTick,
+  info,
 }: {
   data: LoadedData
   favoriteId?: string
@@ -30,6 +31,7 @@ export function TitleTools({
   signedIn: boolean
   scope: ToolScope
   onTick?: () => void
+  info?: ReactNode
 }) {
   const { t } = useLang()
   const personal = usePersonal()
@@ -86,6 +88,7 @@ export function TitleTools({
         </button>
         {menu && (
           <div className="tool-pop menu" role="menu">
+            {info && <div className="tool-pop-info">{info}</div>}
             <button type="button" role="menuitem" aria-expanded={sharing} onClick={() => setSharing(!sharing)}>
               {t('share.button')}
             </button>

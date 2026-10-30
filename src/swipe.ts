@@ -20,7 +20,7 @@ export interface Neighbor {
   number?: string
   /** 跨到另一個區域時，那個區域的名稱 */
   sector?: LocalizedName
-  /** 區域（分區）的顏色：上一區／下一區的卡片用這個顏色 */
+  /** 區域（分區）的顏色：上一區／下一區、上一條／下一條的卡片用這個顏色 */
   color?: string
 }
 
@@ -68,6 +68,8 @@ export function neighbors(page: Page, data: NavData, order?: RouteOrder): Neighb
         name: ref.route.name,
         number: ref.route.number,
         sector: ref.sector.id === here ? undefined : ref.sector.name,
+        // 和路線卡片的標題卡同色（那條路線所在分區的顏色）
+        color: sectorColor(ref.area.color, ref.area.sectors.indexOf(ref.sector), ref.area.sectors.length),
       }
     }
     return { kind: 'route', prev: pick(at - 1), next: pick(at + 1) }
@@ -235,8 +237,25 @@ export function useSwipe(
       const velocity = first && last !== first ? (last.x - first.x) / Math.max(1, e.timeStamp - first.t) : 0
       const dir: Dir = g.dx < 0 ? 'next' : 'prev'
       const commit = dir === g.dir && h.current.can(dir) && shouldCommit(g.dx, velocity, window.innerWidth, window.scrollY - g.sy0)
-      end(!commit)
-      if (commit) h.current.onCommit(dir)
+      if (!commit) return end(true)
+      // 切換：目前的頁面繼續往手指的方向滑出、淡掉，再換上新頁面（從另一側淡入）；
+      // 直接換的話，新頁面出現在舊頁面的另一側，看起來像往反方向跳了一下
+      const el = moving.current
+      if (!el || reduced()) {
+        end(false)
+        return h.current.onCommit(dir)
+      }
+      const out = g.dx + Math.sign(g.dx) * 0.4 * window.innerWidth
+      g = undefined
+      el.style.transition = 'transform 0.12s ease-in, opacity 0.12s ease-in'
+      el.style.transform = `translateX(${out.toFixed(1)}px)`
+      el.style.opacity = '0'
+      window.setTimeout(() => {
+        follow(0)
+        h.current.onArmed(false)
+        h.current.onLock(null)
+        h.current.onCommit(dir)
+      }, 120)
     }
     const onCancel = () => end(true)
 

@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react'
 
-/** 彈窗：手機從下方滑出、電腦置中；Esc 或點外面關閉（樣式在 src/map/map.css 的 .sheet：目前都和地圖一起用） */
-export function Sheet({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: ReactNode }) {
+/** 彈窗：手機從下方滑出、電腦置中；Esc 或點外面關閉 */
+export function Sheet({ open, onClose, title, className, children }: { open: boolean; onClose: () => void; title: string; className?: string; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null)
   const id = useId()
   useEffect(() => {
@@ -12,7 +12,7 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
   return (
     <dialog
       ref={ref}
-      className="sheet"
+      className={className ? `sheet ${className}` : 'sheet'}
       onClose={onClose}
       onClick={(e) => e.target === ref.current && onClose()}
       aria-labelledby={id}

@@ -2435,12 +2435,6 @@ a.action {
   text-align: right;
 }
 
-.pager-hint {
-  grid-column: 1 / -1;
-  margin: 0;
-  text-align: center;
-}
-
 .slide-next {
   animation: slide-from-right 0.22s ease-out;
 }
@@ -2449,17 +2443,18 @@ a.action {
   animation: slide-from-left 0.22s ease-out;
 }
 
+/* 新頁面從滑動方向的另一側進來（往左滑，下一個從右邊來）；從透明開始，接在被拖走的舊頁面後面不會看到跳動 */
 @keyframes slide-from-right {
   from {
-    transform: translateX(32px);
-    opacity: 0.4;
+    transform: translateX(48px);
+    opacity: 0;
   }
 }
 
 @keyframes slide-from-left {
   from {
-    transform: translateX(-32px);
-    opacity: 0.4;
+    transform: translateX(-48px);
+    opacity: 0;
   }
 }
 
@@ -2728,8 +2723,15 @@ a.action {
   background: transparent;
 }
 
-.area-hero-wrap > .page-tools .tool-button:is(:hover, :active, [aria-expanded='true']) {
+.area-hero-wrap > .page-tools .tool-button:is(:active, [aria-expanded='true']) {
   background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+/* 觸控螢幕點了之後 :hover 會一直留著（圓形底不會消失）：只有滑鼠才有 hover 的底色 */
+@media (hover: hover) {
+  .area-hero-wrap > .page-tools .tool-button:hover {
+    background: color-mix(in srgb, var(--text) 10%, transparent);
+  }
 }
 
 /* 每一層的標題卡一樣高（有沒有工具列、地圖橫的或直的） */
@@ -2762,12 +2764,19 @@ a.action {
   cursor: pointer;
 }
 
-.tool-button:hover,
 .tool-button:active,
 .tool-button[aria-expanded='true'] {
   text-decoration: none;
   background: var(--surface-2);
   color: var(--text);
+}
+
+@media (hover: hover) {
+  .tool-button:hover {
+    text-decoration: none;
+    background: var(--surface-2);
+    color: var(--text);
+  }
 }
 
 .tool-pop {
@@ -3545,50 +3554,6 @@ main.map > div {
 
 .route-bolts h2 {
   display: none;
-}
-
-/* 評價與留言收起來時：一列摘要與最新一則留言（像社群 App 貼文下方） */
-.reviews-fold {
-  display: grid;
-  gap: 8px;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.reviews-fold-head {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-
-.reviews-fold-head strong {
-  font-size: 1.05rem;
-}
-
-.reviews-fold-chevron {
-  margin-left: auto;
-  align-self: center;
-  color: var(--faint);
-}
-
-.reviews-fold-latest {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.reviews-fold-latest > span:last-child {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* ── 評價與留言（ReviewsSection） ── */
@@ -5516,3 +5481,117 @@ html {
   border-radius: 20px 20px 0 0;
 }
 
+/* 彈窗（Sheet.tsx）：手機從下方滑出、電腦置中 */
+.sheet {
+  width: min(520px, 100%);
+  max-width: 100%;
+  max-height: 85vh;
+  margin: auto auto 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.25);
+}
+
+.sheet::backdrop {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.sheet-body {
+  padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
+}
+
+.sheet h2 {
+  margin: 0 0 12px;
+  font-size: 1.15rem;
+}
+
+@media (min-width: 768px) {
+  .sheet {
+    margin: auto;
+    border-radius: var(--radius);
+  }
+}
+
+/* 留言視窗（像 IG）：新的在下面，輸入框固定在最下方 */
+.comments-sheet {
+  height: 85vh;
+}
+
+.comments-sheet .sheet-body {
+  padding-bottom: 0;
+}
+
+.comments-sheet .review-compose {
+  position: sticky;
+  bottom: 0;
+  margin: 0 -20px;
+  padding: 10px 20px calc(12px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+/* 評價與留言（像 IG 貼文下方）：圖示與數字，下面是最新一則留言 */
+.reviews-bar {
+  display: grid;
+  gap: 6px;
+}
+
+.reviews-bar-icons {
+  display: flex;
+  gap: 14px;
+  margin-left: -6px;
+}
+
+.reviews-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 40px;
+  padding: 0 6px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.reviews-icon.rating svg {
+  color: var(--star);
+}
+
+.reviews-latest {
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* 路線頁標題卡的難度：不加難度底色 */
+.route-facts .route-grade {
+  font-size: 1.35rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 手機的「更多」選單上方：安全與拉測、首攀 */
+.tool-pop-info {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+.tool-pop-info .route-data-row {
+  grid-template-columns: 5rem minmax(0, 1fr);
+}

@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { relativeTime } from '../format'
 import { useLang, type MessageKey } from '../i18n'
 import { useCloud } from '../personal/sync'
 import { postComment, rate, removeComment, report, toggleLike } from '../social/actions'
 import { COMMENT_MAX, FEELS, routeKey, summarize, type Comment, type Feel } from '../social/model'
 import { displayName, useComments, useSocial } from '../social/store'
+import { Sheet } from './Sheet'
 import { StarPicker } from './Stars'
 
 /** 頭像底色：依使用者固定一個顏色 */
@@ -14,9 +15,6 @@ function avatarColor(uid: string): string {
   for (const c of uid) h = (h * 31 + c.charCodeAt(0)) >>> 0
   return AVATAR_COLORS[h % AVATAR_COLORS.length]
 }
-
-/** 一開始顯示幾則留言，其餘按「顯示全部」 */
-const SHOWN = 5
 
 const Avatar = ({ uid, name }: { uid: string; name: string }) => (
   <span className="avatar" style={{ background: avatarColor(uid) }} aria-hidden>
@@ -37,39 +35,41 @@ const Heart = ({ on }: { on: boolean }) => (
   </svg>
 )
 
-/**
- * 評價與留言（社群 App 的做法）：上面是大字平均與分佈、體感難度；
- * 登入後在頭像旁邊直接打分、寫留言（一個輸入框）；留言按時間排，名字旁邊帶這個人給的星等與體感，
- * 刪除、檢舉收在每則留言的「⋯」。留言太多時先顯示最新幾則。
- * 固定點（rateable 為 false）沒有評分，只有留言。
- */
-export function ReviewsSection({ routeId, rateable }: { routeId: string; rateable: boolean }) {
-  const social = useSocial()
-  const comments = useComments(routeId)
-  const cloud = useCloud()
+const StarIcon = ({ on }: { on: boolean }) => (
+  <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden>
+    <path
+      d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"
+      fill={on ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinejoin="round"
+    />
+  </svg>
+)
+
+const CommentIcon = () => (
+  <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden>
+    <path
+      d="M20.5 11.5a8.5 8.5 0 0 1-12.4 7.6L3.5 20.5l1.4-4.4A8.5 8.5 0 1 1 20.5 11.5z"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinejoin="round"
+    />
+  </svg>
+)
+
+const SendIcon = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
+    <path d="M3 20l18-8L3 4v6l12 2-12 2z" fill="currentColor" />
+  </svg>
+)
+
+/** 送出評分、留言等：送出中停用按鈕，失敗時顯示錯誤 */
+function useRun() {
   const { t } = useLang()
-  const uid = cloud.status === 'signed-in' ? cloud.user?.uid : undefined
-  const ratings = social.ratings[routeKey(routeId)]
-  const summary = summarize(ratings)
-  const mine = uid ? ratings?.[uid] : undefined
-  const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
-  const [all, setAll] = useState(false)
-  const [menu, setMenu] = useState<string>()
-  /** 正在回覆哪一則、回覆的內容；展開了回覆的留言 */
-  const [replyTo, setReplyTo] = useState<string>()
-  const [replyText, setReplyText] = useState('')
-  const [open, setOpen] = useState<Set<string>>(new Set())
-
-  // 點選單外面關閉
-  useEffect(() => {
-    if (!menu) return
-    const close = (e: PointerEvent) => !(e.target as Element).closest('.comment-menu') && setMenu(undefined)
-    document.addEventListener('pointerdown', close)
-    return () => document.removeEventListener('pointerdown', close)
-  }, [menu])
-
   const run = async (action: () => Promise<void>, errorKey: ErrorKey) => {
     setBusy(true)
     setError(undefined)
@@ -81,7 +81,169 @@ export function ReviewsSection({ routeId, rateable }: { routeId: string; rateabl
       setBusy(false)
     }
   }
+  return { busy, error, setError, run }
+}
+
+export type ReviewsSheet = 'rating' | 'comments'
+
+/**
+ * 評價與留言（像 IG 貼文下方）：只有圖示與數字（★ 平均星等、留言數），下面是最新一則留言的預覽。
+ * 點星星從下方滑出評分（分佈、體感難度、自己打分），點留言圖示或預覽滑出留言（新的在下面，輸入框在最下方）。
+ * 固定點（rateable 為 false）沒有評分，只有留言。sheet：目前打開的（標題卡上的星等也會打開評分）。
+ */
+export function ReviewsBar({
+  routeId,
+  rateable,
+  sheet,
+  onSheet,
+}: {
+  routeId: string
+  rateable: boolean
+  sheet?: ReviewsSheet
+  onSheet: (sheet: ReviewsSheet | undefined) => void
+}) {
+  const social = useSocial()
+  const comments = useComments(routeId)
+  const { t } = useLang()
+  const summary = summarize(social.ratings[routeKey(routeId)])
+  const top = (comments ?? []).filter((c) => !c.parent)
+  // 留言由新到舊（social/store.ts）
+  const latest = top[0]
+  return (
+    <div className="reviews-bar">
+      <div className="reviews-bar-icons">
+        {rateable && (
+          <button type="button" className="reviews-icon rating" aria-label={t('rating.title')} onClick={() => onSheet('rating')}>
+            <StarIcon on={!!summary} />
+            {summary && <span>{summary.average.toFixed(1)}</span>}
+          </button>
+        )}
+        <button type="button" className="reviews-icon comments" aria-label={t('comments.title')} onClick={() => onSheet('comments')}>
+          <CommentIcon />
+          {top.length > 0 && <span>{top.length}</span>}
+        </button>
+      </div>
+      {latest && (
+        <button type="button" className="reviews-latest" onClick={() => onSheet('comments')}>
+          <strong>{displayName(social.profiles, latest.uid)}</strong> {latest.text}
+        </button>
+      )}
+      {rateable && (
+        <Sheet open={sheet === 'rating'} onClose={() => onSheet(undefined)} title={t('rating.title')}>
+          <RatingPanel routeId={routeId} />
+        </Sheet>
+      )}
+      <Sheet open={sheet === 'comments'} onClose={() => onSheet(undefined)} title={t('comments.title')} className="comments-sheet">
+        <CommentsPanel routeId={routeId} />
+      </Sheet>
+    </div>
+  )
+}
+
+/** 評分：大字平均與各星等人數、體感難度；登入後直接點星星打分（再點一次同一顆是取消）、選體感 */
+function RatingPanel({ routeId }: { routeId: string }) {
+  const social = useSocial()
+  const cloud = useCloud()
+  const { t } = useLang()
+  const { busy, error, run } = useRun()
+  const uid = cloud.status === 'signed-in' ? cloud.user?.uid : undefined
+  const ratings = social.ratings[routeKey(routeId)]
+  const summary = summarize(ratings)
+  const mine = uid ? ratings?.[uid] : undefined
   const save = (stars: number, feel: Feel | undefined) => run(() => rate(routeId, { stars, ...(feel ? { feel } : {}) }), 'rating.saveError')
+  const feelTotal = summary ? summary.feel.soft + summary.feel.fair + summary.feel.hard : 0
+  return (
+    <div className="reviews">
+      {summary && (
+        <>
+          <div className="rating-m-summary">
+            <div className="rating-m-average">
+              <strong>{summary.average.toFixed(1)}</strong>
+              <span className="stars-static" aria-hidden>
+                {'★★★★★'.slice(0, Math.round(summary.average))}
+                <span className="dim">{'★★★★★'.slice(Math.round(summary.average))}</span>
+              </span>
+              <span className="muted small">{t('rating.count', { n: summary.count })}</span>
+            </div>
+            <ul className="rating-m-bars" aria-label={t('rating.barsAria')}>
+              {[5, 4, 3, 2, 1].map((n) => (
+                <li key={n} title={`${n}★ ${summary.stars[n - 1]}`}>
+                  <span>{n}</span>
+                  <span className="bar">
+                    <span style={{ width: `${(summary.stars[n - 1] / summary.count) * 100}%` }} />
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          {feelTotal > 0 && (
+            <div className="rating-m-feel" role="img" aria-label={`${t('rating.feelAria')}：${FEELS.map((f) => `${t(`feel.${f}`)} ${summary.feel[f]}`).join('、')}`}>
+              {FEELS.filter((f) => summary.feel[f] > 0).map((f) => (
+                <span key={f} className={`feel-${f}`} style={{ flexGrow: summary.feel[f] }}>
+                  {t(`feel.${f}`)} {summary.feel[f]}
+                </span>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+      {uid && (
+        <div className="review-rate">
+          <StarPicker
+            value={mine?.stars ?? 0}
+            disabled={busy}
+            onChange={(stars) => void (stars === mine?.stars ? run(() => rate(routeId, null), 'rating.deleteError') : save(stars, mine?.feel))}
+          />
+          {mine && (
+            <div className="chips" role="group" aria-label={t('rating.feelAria')}>
+              {FEELS.map((f) => (
+                <button key={f} type="button" className="chip" aria-pressed={mine.feel === f} disabled={busy} onClick={() => void save(mine.stars, mine.feel === f ? undefined : f)}>
+                  {t(`feel.${f}`)}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {error && <p className="small error">{error}</p>}
+    </div>
+  )
+}
+
+/**
+ * 留言（像 IG 的留言視窗）：由舊到新，新的在下面、打開時捲到最下面；登入後輸入框固定在最下方。
+ * 名字旁邊帶這個人給的星等與體感，刪除、檢舉收在每則留言的「⋯」，讚與回覆在內容下面。
+ */
+function CommentsPanel({ routeId }: { routeId: string }) {
+  const social = useSocial()
+  const comments = useComments(routeId)
+  const cloud = useCloud()
+  const { t } = useLang()
+  const { busy, error, setError, run } = useRun()
+  const uid = cloud.status === 'signed-in' ? cloud.user?.uid : undefined
+  const ratings = social.ratings[routeKey(routeId)]
+  const [text, setText] = useState('')
+  const [menu, setMenu] = useState<string>()
+  /** 正在回覆哪一則、回覆的內容；展開了回覆的留言 */
+  const [replyTo, setReplyTo] = useState<string>()
+  const [replyText, setReplyText] = useState('')
+  const [open, setOpen] = useState<Set<string>>(new Set())
+  const end = useRef<HTMLDivElement>(null)
+
+  // 點選單外面關閉
+  useEffect(() => {
+    if (!menu) return
+    const close = (e: PointerEvent) => !(e.target as Element).closest('.comment-menu') && setMenu(undefined)
+    document.addEventListener('pointerdown', close)
+    return () => document.removeEventListener('pointerdown', close)
+  }, [menu])
+
+  const top = comments?.filter((c) => !c.parent).reverse()
+  // 打開、送出新留言後捲到最下面（最新的一則）；scrollIntoView 在新版瀏覽器會回傳 Promise，不能當成 effect 的回傳值
+  useEffect(() => {
+    end.current?.scrollIntoView({ block: 'end' })
+  }, [top?.length])
+
   const send = () => {
     if (!navigator.onLine) return setError(t('comments.offline'))
     void run(async () => {
@@ -112,6 +274,10 @@ export function ReviewsSection({ routeId, rateable }: { routeId: string; rateabl
       alert(t('comments.reported'))
     }, 'comments.reportError')
   }
+
+  const likes = social.likes[routeKey(routeId)] ?? {}
+  const repliesOf = (id: string) => (comments ?? []).filter((c) => c.parent === id).sort((a, b) => a.createdAt - b.createdAt)
+  const me = uid ? displayName(social.profiles, uid) : ''
 
   /** 一則留言或回覆：頭像、名字（帶星等與體感）、時間、「⋯」選單、內容、讚與回覆 */
   const commentBody = (c: Comment, isReply = false) => {
@@ -186,206 +352,85 @@ export function ReviewsSection({ routeId, rateable }: { routeId: string; rateabl
     )
   }
 
-  const feelTotal = summary ? summary.feel.soft + summary.feel.fair + summary.feel.hard : 0
-  const top = comments?.filter((c) => !c.parent)
-  const repliesOf = (id: string) => (comments ?? []).filter((c) => c.parent === id).sort((a, b) => a.createdAt - b.createdAt)
-  const likes = social.likes[routeKey(routeId)] ?? {}
-  const shown = top && !all ? top.slice(0, SHOWN) : top
-  const me = uid ? displayName(social.profiles, uid) : ''
-
   return (
-    <section className="reviews">
-      <h2>
-        {t('reviews.title')}
-        {top && top.length > 0 && <span className="muted"> {top.length}</span>}
-      </h2>
-
-      {rateable &&
-        (summary ? (
-          <>
-            <div className="rating-m-summary">
-              <div className="rating-m-average">
-                <strong>{summary.average.toFixed(1)}</strong>
-                <span className="stars-static" aria-hidden>
-                  {'★★★★★'.slice(0, Math.round(summary.average))}
-                  <span className="dim">{'★★★★★'.slice(Math.round(summary.average))}</span>
-                </span>
-                <span className="muted small">{t('rating.count', { n: summary.count })}</span>
-              </div>
-              <ul className="rating-m-bars" aria-label={t('rating.barsAria')}>
-                {[5, 4, 3, 2, 1].map((n) => (
-                  <li key={n} title={`${n}★ ${summary.stars[n - 1]}`}>
-                    <span>{n}</span>
-                    <span className="bar">
-                      <span style={{ width: `${(summary.stars[n - 1] / summary.count) * 100}%` }} />
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            {feelTotal > 0 && (
-              <div className="rating-m-feel" role="img" aria-label={`${t('rating.feelAria')}：${FEELS.map((f) => `${t(`feel.${f}`)} ${summary.feel[f]}`).join('、')}`}>
-                {FEELS.filter((f) => summary.feel[f] > 0).map((f) => (
-                  <span key={f} className={`feel-${f}`} style={{ flexGrow: summary.feel[f] }}>
-                    {t(`feel.${f}`)} {summary.feel[f]}
-                  </span>
-                ))}
-              </div>
-            )}
-          </>
-        ) : (
-          <p className="muted small">{social.ratingsLoaded ? t('rating.none') : t('app.loading')}</p>
-        ))}
-
+    <div className="reviews">
+      {top === undefined ? (
+        <p className="muted small">{t('app.loading')}</p>
+      ) : (
+        top.length > 0 && (
+          <ul className="comment-m-list">
+            {top.map((c) => {
+              const replies = repliesOf(c.id)
+              const expanded = open.has(c.id)
+              return (
+                <li key={c.id}>
+                  {commentBody(c)}
+                  {replies.length > 0 && (
+                    <button
+                      type="button"
+                      className="comment-thread-toggle"
+                      aria-expanded={expanded}
+                      onClick={() => setOpen((o) => (o.has(c.id) ? new Set([...o].filter((x) => x !== c.id)) : new Set(o).add(c.id)))}
+                    >
+                      {expanded ? t('comments.hideReplies') : t('comments.viewReplies', { n: replies.length })}
+                    </button>
+                  )}
+                  {(expanded || replyTo === c.id) && (
+                    <div className="comment-replies">
+                      {expanded &&
+                        replies.map((r) => (
+                          <div key={r.id} className="comment-reply">
+                            {commentBody(r, true)}
+                          </div>
+                        ))}
+                      {replyTo === c.id && (
+                        <form
+                          className="comment-m-form reply-form"
+                          onSubmit={(e) => {
+                            e.preventDefault()
+                            sendReply(c.id)
+                          }}
+                        >
+                          <textarea
+                            rows={1}
+                            autoFocus
+                            maxLength={COMMENT_MAX}
+                            placeholder={t('comments.replyPlaceholder', { name: displayName(social.profiles, c.uid) })}
+                            value={replyText}
+                            onChange={(e) => setReplyText(e.target.value)}
+                          />
+                          <button type="submit" className="send" disabled={busy || !replyText.trim()} aria-label={t('comments.send')} title={t('comments.send')}>
+                            <SendIcon />
+                          </button>
+                        </form>
+                      )}
+                    </div>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        )
+      )}
+      <div ref={end} />
+      {error && <p className="small error">{error}</p>}
       {uid && (
         <div className="review-compose">
           <Avatar uid={uid} name={me} />
-          <div className="review-compose-body">
-            {rateable && (
-              <div className="review-rate">
-                <span className="muted small">{mine ? t('rating.yours') : t('rating.ask')}</span>
-                <StarPicker value={mine?.stars ?? 0} disabled={busy} onChange={(stars) => void save(stars, mine?.feel)} />
-                {mine && (
-                  <div className="chips" role="group" aria-label={t('rating.feelAria')}>
-                    {FEELS.map((f) => (
-                      <button key={f} type="button" className="chip" aria-pressed={mine.feel === f} disabled={busy} onClick={() => void save(mine.stars, mine.feel === f ? undefined : f)}>
-                        {t(`feel.${f}`)}
-                      </button>
-                    ))}
-                    <button type="button" className="link-button small" onClick={() => void run(() => rate(routeId, null), 'rating.deleteError')} disabled={busy}>
-                      {t('rating.delete')}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-            <form
-              className="comment-m-form"
-              onSubmit={(e) => {
-                e.preventDefault()
-                send()
-              }}
-            >
-              <textarea rows={1} maxLength={COMMENT_MAX} placeholder={t('comments.placeholder')} value={text} onChange={(e) => setText(e.target.value)} />
-              <button type="submit" className="send" disabled={busy || !text.trim()} aria-label={t('comments.send')} title={t('comments.send')}>
-                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
-                  <path d="M3 20l18-8L3 4v6l12 2-12 2z" fill="currentColor" />
-                </svg>
-              </button>
-            </form>
-            {text.length > COMMENT_MAX * 0.8 && (
-              <p className="muted small">
-                {text.length}/{COMMENT_MAX}
-              </p>
-            )}
-          </div>
+          <form
+            className="comment-m-form"
+            onSubmit={(e) => {
+              e.preventDefault()
+              send()
+            }}
+          >
+            <textarea rows={1} maxLength={COMMENT_MAX} placeholder={t('comments.placeholder')} value={text} onChange={(e) => setText(e.target.value)} />
+            <button type="submit" className="send" disabled={busy || !text.trim()} aria-label={t('comments.send')} title={t('comments.send')}>
+              <SendIcon />
+            </button>
+          </form>
         </div>
       )}
-      {error && <p className="small error">{error}</p>}
-
-      {shown === undefined ? (
-        <p className="muted small">{t('app.loading')}</p>
-      ) : shown.length === 0 ? (
-        <p className="muted small">{t('comments.none')}</p>
-      ) : (
-        <ul className="comment-m-list">
-          {shown.map((c) => {
-            const replies = repliesOf(c.id)
-            const expanded = open.has(c.id)
-            return (
-              <li key={c.id}>
-                {commentBody(c)}
-                {replies.length > 0 && (
-                  <button
-                    type="button"
-                    className="comment-thread-toggle"
-                    aria-expanded={expanded}
-                    onClick={() => setOpen((o) => (o.has(c.id) ? new Set([...o].filter((x) => x !== c.id)) : new Set(o).add(c.id)))}
-                  >
-                    {expanded ? t('comments.hideReplies') : t('comments.viewReplies', { n: replies.length })}
-                  </button>
-                )}
-                {(expanded || replyTo === c.id) && (
-                  <div className="comment-replies">
-                    {expanded &&
-                      replies.map((r) => (
-                        <div key={r.id} className="comment-reply">
-                          {commentBody(r, true)}
-                        </div>
-                      ))}
-                    {replyTo === c.id && (
-                      <form
-                        className="comment-m-form reply-form"
-                        onSubmit={(e) => {
-                          e.preventDefault()
-                          sendReply(c.id)
-                        }}
-                      >
-                        <textarea
-                          rows={1}
-                          autoFocus
-                          maxLength={COMMENT_MAX}
-                          placeholder={t('comments.replyPlaceholder', { name: displayName(social.profiles, c.uid) })}
-                          value={replyText}
-                          onChange={(e) => setReplyText(e.target.value)}
-                        />
-                        <button type="submit" className="send" disabled={busy || !replyText.trim()} aria-label={t('comments.send')} title={t('comments.send')}>
-                          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
-                            <path d="M3 20l18-8L3 4v6l12 2-12 2z" fill="currentColor" />
-                          </svg>
-                        </button>
-                      </form>
-                    )}
-                  </div>
-                )}
-              </li>
-            )
-          })}
-        </ul>
-      )}
-      {top && top.length > SHOWN && !all && (
-        <button type="button" className="comment-more" onClick={() => setAll(true)}>
-          {t('comments.all', { n: top.length })}
-        </button>
-      )}
-    </section>
-  )
-}
-
-/**
- * 評價與留言預設收起（像社群 App 貼文下方的一列）：平均星等、評分人數、留言數，下面是最新一則留言的預覽；
- * 點了才展開完整的評價與留言（ReviewsSection）。open：已經展開（例如點了標題卡上的星等）。
- */
-export function ReviewsFold({ routeId, rateable, open, onOpen }: { routeId: string; rateable: boolean; open: boolean; onOpen: () => void }) {
-  const social = useSocial()
-  const comments = useComments(routeId)
-  const { t } = useLang()
-  if (open) return <ReviewsSection routeId={routeId} rateable={rateable} />
-  const summary = summarize(social.ratings[routeKey(routeId)])
-  const top = (comments ?? []).filter((c) => !c.parent)
-  // 留言由新到舊（social/store.ts）
-  const latest = top[0]
-  const stats = [
-    rateable && (summary ? `★ ${summary.average.toFixed(1)} · ${t('rating.count', { n: summary.count })}` : t('rating.none')),
-    t('comments.count', { n: top.length }),
-  ].filter(Boolean)
-  return (
-    <button type="button" className="reviews-fold" aria-expanded={false} onClick={onOpen}>
-      <span className="reviews-fold-head">
-        <strong>{t('reviews.title')}</strong>
-        <span className="muted small">{stats.join(' · ')}</span>
-        <svg className="reviews-fold-chevron" viewBox="0 0 24 24" width="18" height="18" aria-hidden>
-          <path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </span>
-      {latest && (
-        <span className="reviews-fold-latest">
-          <Avatar uid={latest.uid} name={displayName(social.profiles, latest.uid)} />
-          <span>
-            <strong>{displayName(social.profiles, latest.uid)}</strong> {latest.text}
-          </span>
-        </span>
-      )}
-    </button>
+    </div>
   )
 }

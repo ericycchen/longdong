@@ -49,7 +49,8 @@ describe('左右滑動的上一區／下一區', () => {
       prev: undefined,
       next: { hash: '/route/r2', name: { zh: 'r2' }, number: '2', sector: undefined },
     })
-    expect(neighbors({ name: 'route', id: 'r2' }, data)?.next).toEqual({ hash: '/route/r3', name: { zh: 'r3' }, number: '3', sector: { zh: 'b1' } })
+    // 上一條／下一條帶著那條路線所在分區的顏色（和路線卡片的標題卡同色）
+    expect(neighbors({ name: 'route', id: 'r2' }, data)?.next).toEqual({ hash: '/route/r3', name: { zh: 'r3' }, number: '3', sector: { zh: 'b1' }, color: '#cc0000' })
     expect(neighbors({ name: 'route', id: 'r3' }, data)?.next).toBeUndefined()
   })
 

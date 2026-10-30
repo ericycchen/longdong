@@ -3,7 +3,7 @@ import { BoltTable } from '../components/BoltTable'
 import { GradePill } from '../components/GradePill'
 import { PageHero } from '../components/PageHero'
 import { PersonalPanel } from '../components/PersonalPanel'
-import { ReviewsFold } from '../components/ReviewsSection'
+import { ReviewsBar, type ReviewsSheet } from '../components/ReviewsSection'
 import { SafetyLight } from '../components/SafetyLight'
 import { TitleTools } from '../components/TitleTools'
 import type { LoadedData } from '../data/dataset'
@@ -12,7 +12,7 @@ import { CommunityText } from '../edit/CommunityText'
 import type { ToolScope } from '../edit/PageTools'
 import { textTarget } from '../edit/textEdits'
 import { formatDate, quickdraws, typeLabel } from '../format'
-import { localName, useLang } from '../i18n'
+import { localName, useLang, type Lang, type Translate } from '../i18n'
 import { useState, type ReactNode } from 'react'
 import { useWide } from '../layout'
 import { useCloud } from '../personal/sync'
@@ -40,7 +40,7 @@ export function RoutePage({ data, id, topoInList }: { data: LoadedData; id: stri
   const signedIn = cloudStatus === 'signed-in'
   const rating = summarize(useSocial().ratings[routeKey(id)])
   const [tickOpen, setTickOpen] = useState(false)
-  const [reviewsOpen, setReviewsOpen] = useState(false)
+  const [reviews, setReviews] = useState<ReviewsSheet>()
   const wide = useWide()
   if (!ref) return <NotFound />
   const { route, sector, area } = ref
@@ -62,19 +62,12 @@ export function RoutePage({ data, id, topoInList }: { data: LoadedData; id: stri
         sub={[route.number && `#${route.number}`, name.sub].filter(Boolean).join(' · ')}
         facts={
           <p className="route-facts">
-            <GradePill grade={route.grade} value={route.gradeValue} size="lg" />
+            {route.grade && <span className="route-grade">{route.grade}</span>}
             {route.heightM && <span>{route.heightM} m</span>}
             {qd && <span>{t('type.quickdraws', { n: qd })}</span>}
             {(route.type || route.isFixture) && <span>{route.isFixture ? t('type.fixture') : typeLabel(route.type!, t)}</span>}
             {rating && (
-              <button
-                type="button"
-                className="route-facts-rating"
-                onClick={() => {
-                  setReviewsOpen(true)
-                  requestAnimationFrame(() => document.getElementById('rating')?.scrollIntoView({ behavior: 'smooth' }))
-                }}
-              >
+              <button type="button" className="route-facts-rating" onClick={() => setReviews('rating')}>
                 ★ {rating.average.toFixed(1)}
               </button>
             )}
@@ -89,6 +82,7 @@ export function RoutePage({ data, id, topoInList }: { data: LoadedData; id: stri
             signedIn={signedIn}
             scope={scope}
             onTick={route.isFixture ? undefined : () => setTickOpen(true)}
+            info={wide ? undefined : <DataRows rows={infoRows(route, lang, t)} />}
           />
         }
         shape={<SectorShape area={area} sector={sector} color={areaSectorColor(area, sector)} single className="area-hero-shape" />}
@@ -126,10 +120,10 @@ export function RoutePage({ data, id, topoInList }: { data: LoadedData; id: stri
         </section>
       )}
 
-      <RouteData data={data} route={route} />
+      <RouteData data={data} route={route} info={wide} />
 
       <div id="rating" className="route-block">
-        <ReviewsFold routeId={route.id} rateable={!route.isFixture} open={reviewsOpen} onOpen={() => setReviewsOpen(true)} />
+        <ReviewsBar routeId={route.id} rateable={!route.isFixture} sheet={reviews} onSheet={setReviews} />
       </div>
     </article>
   )
@@ -166,21 +160,14 @@ function RouteStatus({ route }: { route: Route }) {
   )
 }
 
-/**
- * 路線資料：一行一項（安全與拉測、首攀、Bolt、備註），左邊是項目、右邊是內容；
- * Bolt 只列摘要（幾支 bolt、幾個 anchor、材質、安裝年），明細（每一支的位置、材質、安裝、拉測）點了才在下面展開、滿寬。
- */
-function RouteData({ data, route }: { data: LoadedData; route: Route }) {
-  const { lang, t } = useLang()
+type Rows = [string, ReactNode][]
+
+/** 安全與拉測、首攀（電腦版在路線資料裡，手機在「更多」選單上方） */
+function infoRows(route: Route, lang: Lang, t: Translate): Rows {
   const level = safetyLevel(route)
   const safety = t(level === 'danger' ? 'safety.red' : route.safety ? `safety.${route.safety}` : 'safety.unrated')
   const status = route.status && (lang === 'zh' ? route.statusLabel : t(`status.${route.status}`))
-  const fixings = [...route.bolts, ...route.anchors]
-  const materials = [...new Set(fixings.map((b) => b.material).filter(Boolean))]
-  const years = fixings.map((b) => b.installed?.slice(0, 4)).filter(Boolean).sort() as string[]
-  const installed = years.length ? (years[0] === years.at(-1) ? years[0] : `${years[0]}–${years.at(-1)}`) : undefined
-  const counts = [route.bolts.length > 0 && t('route.bolts', { n: route.bolts.length }), route.anchors.length > 0 && t('route.anchors', { n: route.anchors.length })]
-  const rows: [string, ReactNode][] = []
+  const rows: Rows = []
   if (!route.isFixture)
     rows.push([
       t('route.safetyTests'),
@@ -201,16 +188,36 @@ function RouteData({ data, route }: { data: LoadedData; route: Route }) {
         {route.firstAscentDateLabel && <span className="muted"> · {route.firstAscentDateLabel}</span>}
       </>,
     ])
+  return rows
+}
+
+/** 一行一項：左邊是項目、右邊是內容 */
+function DataRows({ rows }: { rows: Rows }) {
+  return rows.map(([label, value]) => (
+    <div key={label} className="route-data-row">
+      <span className="route-data-label">{label}</span>
+      <span>{value}</span>
+    </div>
+  ))
+}
+
+/**
+ * 路線資料：一行一項（安全與拉測、首攀只有 info 時，Bolt、備註），左邊是項目、右邊是內容；
+ * Bolt 只列摘要（幾支 bolt、幾個 anchor、材質、安裝年），明細（每一支的位置、材質、安裝、拉測）點了才在下面展開、滿寬。
+ */
+function RouteData({ data, route, info }: { data: LoadedData; route: Route; info: boolean }) {
+  const { lang, t } = useLang()
+  const fixings = [...route.bolts, ...route.anchors]
+  const materials = [...new Set(fixings.map((b) => b.material).filter(Boolean))]
+  const years = fixings.map((b) => b.installed?.slice(0, 4)).filter(Boolean).sort() as string[]
+  const installed = years.length ? (years[0] === years.at(-1) ? years[0] : `${years[0]}–${years.at(-1)}`) : undefined
+  const counts = [route.bolts.length > 0 && t('route.bolts', { n: route.bolts.length }), route.anchors.length > 0 && t('route.anchors', { n: route.anchors.length })]
+  const rows: Rows = info ? infoRows(route, lang, t) : []
   if (route.notes) rows.push([t('route.notes'), <span className="pre">{route.notes}</span>])
   if (rows.length === 0 && fixings.length === 0) return null
   return (
     <div className="route-data route-block">
-      {rows.map(([label, value]) => (
-        <div key={label} className="route-data-row">
-          <span className="route-data-label">{label}</span>
-          <span>{value}</span>
-        </div>
-      ))}
+      <DataRows rows={rows} />
       {fixings.length > 0 && (
         <details className="route-bolts">
           <summary className="route-data-row">
