@@ -1,9 +1,12 @@
 name: CI
 
-# PR 的必要檢查（main 的保護規則要求 `ci` 通過才能合併）。
+# 直接推到 main 時檢查（開發時直接推 main，正式站「發布」前要 main 最新的 ci 通過）；
+# 也是 PR 的檢查（每日資料同步、外部貢獻者）。
 # workflow_dispatch：每日資料同步以 GITHUB_TOKEN 開的 PR 不會觸發 pull_request 事件，
 # 由同步流程在開完 PR 後以 workflow_dispatch 觸發，結果同樣掛在 PR 的 commit 上。
 on:
+  push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -12,7 +15,8 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # main 每次推的結果都要留著（發布前看最新一次）；PR 只看最新的
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   ci:
@@ -34,9 +38,13 @@ jobs:
       # 這次改了哪些地方：沒改到的部分跳過較慢的檢查（每日資料同步等手動觸發的一律全跑）
       - name: 改動範圍
         id: changed
+        env:
+          BEFORE: ${{ github.event.before }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
             files=$(git diff --name-only "origin/$GITHUB_BASE_REF...HEAD")
+          elif [ "$GITHUB_EVENT_NAME" = push ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            files=$(git diff --name-only "$BEFORE...HEAD")
           else
             files=ALL
           fi
