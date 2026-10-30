@@ -558,13 +558,13 @@ try {
     return { x: b.x + b.width / 2, y: b.y + b.height / 2 }
   }
   const labTool = (label: string) => phone.page.locator('.topo-lab-btn', { hasText: label })
-  const fresh = await labHandles().count()
+  const labFresh = await labHandles().count()
   let lb = await labFrame()
   for (const [fx, fy] of [[0.3, 0.8], [0.35, 0.5], [0.3, 0.2]]) {
     await phone.page.touchscreen.tap(lb.x + lb.width * fx, lb.y + lb.height * fy)
     await phone.page.waitForTimeout(400)
   }
-  check('Topo 實驗室：手指點三下，標了三個點', fresh === 0 && (await labHandles().count()) === 3, `${fresh} → ${await labHandles().count()}`)
+  check('Topo 實驗室：手指點三下，標了三個點', labFresh === 0 && (await labHandles().count()) === 3, `${labFresh} → ${await labHandles().count()}`)
   check('Topo 實驗室：把手夠大（手指按得到）', ((await labHandles().first().boundingBox())!.width) >= 40)
   const labTransform = () => phone.page.locator('.react-transform-component').getAttribute('style')
   const t0 = await labTransform()
@@ -584,10 +584,10 @@ try {
   await labTool('復原').click()
   check('Topo 實驗室：復原把點加回來', (await labHandles().count()) === 3)
   await labTool('儲存').click()
-  const stored = (await phone.page.evaluate(`localStorage.getItem('longdong.topoLab.e2ephone')`)) as string | null
+  const labStored = (await phone.page.evaluate(`localStorage.getItem('longdong.topoLab.e2ephone')`)) as string | null
   const labKey = topoRoutes[0].id.replace(/\//g, ':').replace(/\./g, ',')
-  const storedLine = stored ? (JSON.parse(stored) as Record<string, { line?: string }>)[labKey]?.line : undefined
-  check('Topo 實驗室：儲存在這台裝置（三個點），沒有寫進資料庫', storedLine?.split(' ').length === 3 && (await read('v2/topoEdits/e2ephone')) === null, `${stored}`)
+  const storedLine = labStored ? (JSON.parse(labStored) as Record<string, { line?: string }>)[labKey]?.line : undefined
+  check('Topo 實驗室：儲存在這台裝置（三個點），沒有寫進資料庫', storedLine?.split(' ').length === 3 && (await read('v2/topoEdits/e2ephone')) === null, `${labStored}`)
   /** 把手在照片上的相對位置（0–1），和畫面縮放無關 */
   const labSpots = async () => {
     const f = await labFrame()
