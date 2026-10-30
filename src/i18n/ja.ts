@@ -460,7 +460,6 @@ export const ja: Messages = {
   'comments.reportPrompt': '理由（任意）',
   'comments.reported': '報告しました',
   'comments.reportError': '報告できません（{error}）',
-  'comments.placeholder': 'ベータ、現地の状況、岩質、ボルトの問題…',
   'comments.send': '投稿',
   'comments.delete': '削除',
   'comments.report': '報告',

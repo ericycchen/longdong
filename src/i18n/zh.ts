@@ -454,7 +454,6 @@ export const zh = {
   'comments.reportPrompt': '檢舉原因（選填）',
   'comments.reported': '已送出檢舉',
   'comments.reportError': '無法檢舉（{error}）',
-  'comments.placeholder': 'beta、現場狀況、岩質、bolt 問題…',
   'comments.send': '送出',
   'comments.delete': '刪除',
   'comments.report': '檢舉',

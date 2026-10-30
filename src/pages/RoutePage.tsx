@@ -96,7 +96,6 @@ export function RoutePage({ data, id, topoInList }: { data: LoadedData; id: stri
 
       <CommunityText target={textTarget.route(route.id)} original={route.description} editTo={wide ? undefined : href.edit('text', textTarget.route(route.id))} />
 
-      <RouteData data={data} route={route} />
 
       {pitches.length > 1 && (
         <section className="route-block">
@@ -122,7 +121,7 @@ export function RoutePage({ data, id, topoInList }: { data: LoadedData; id: stri
       )}
 
       <div id="rating" className="route-block">
-        <ReviewsBar routeId={route.id} rateable={!route.isFixture} sheet={reviews} onSheet={setReviews} />
+        <ReviewsBar routeId={route.id} rateable={!route.isFixture} sheet={reviews} onSheet={setReviews} info={hasRouteData(route) ? <RouteData data={data} route={route} /> : undefined} />
       </div>
     </article>
   )
@@ -200,14 +199,18 @@ function DataRows({ rows }: { rows: Rows }) {
   ))
 }
 
+/** 有沒有說明以外的路線資料（沒有時不顯示 ⓘ） */
+function hasRouteData(route: Route): boolean {
+  return !route.isFixture || !!route.firstAscent || !!route.notes || route.bolts.length + route.anchors.length > 0
+}
+
 /**
- * 說明以外的路線資料（安全與拉測、首攀、備註、Bolt）放在說明下面，整份收起來，只有一個 ⓘ 按鈕，點了才展開；
+ * 說明以外的路線資料（安全與拉測、首攀、備註、Bolt）：評價與留言旁邊的 ⓘ，點了從下方滑出；
  * 一行一項，左邊是項目、右邊是內容。Bolt 只列摘要（幾支 bolt、幾個 anchor、材質、安裝年），
  * 明細（每一支的位置、材質、安裝、拉測）點了才在下面展開、滿寬。
  */
 function RouteData({ data, route }: { data: LoadedData; route: Route }) {
   const { lang, t } = useLang()
-  const [open, setOpen] = useState(false)
   const fixings = [...route.bolts, ...route.anchors]
   const materials = [...new Set(fixings.map((b) => b.material).filter(Boolean))]
   const years = fixings.map((b) => b.installed?.slice(0, 4)).filter(Boolean).sort() as string[]
@@ -215,43 +218,31 @@ function RouteData({ data, route }: { data: LoadedData; route: Route }) {
   const counts = [route.bolts.length > 0 && t('route.bolts', { n: route.bolts.length }), route.anchors.length > 0 && t('route.anchors', { n: route.anchors.length })]
   const rows = infoRows(route, lang, t)
   if (route.notes) rows.push([t('route.notes'), <span className="pre">{route.notes}</span>])
-  if (rows.length === 0 && fixings.length === 0) return null
   return (
-    <div className="route-info route-block">
-      {open && (
-        <div className="route-data">
-          <DataRows rows={rows} />
-          {fixings.length > 0 && (
-            <details className="route-bolts">
-              <summary className="route-data-row">
-                <span className="route-data-label">Bolt</span>
-                <span>{[...counts, materials.join('、'), installed].filter(Boolean).join(' · ')}</span>
-              </summary>
-              <BoltTable title="Bolt / Anchor" bolts={fixings} data={data}>
-                {route.anchorHardware.length > 0 && (
-                  <ul className="plain small">
-                    {route.anchorHardware.map((h, i) => (
-                      <li key={i}>
-                        {h.item}
-                        {h.quantity && ` ×${h.quantity}`}
-                        {h.spec && <span className="muted"> {h.spec}</span>}
-                        {h.installed && <span className="muted"> · {t('route.installedOn', { date: formatDate(h.installed) })}</span>}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </BoltTable>
-            </details>
-          )}
-        </div>
+    <div className="route-data">
+      <DataRows rows={rows} />
+      {fixings.length > 0 && (
+        <details className="route-bolts">
+          <summary className="route-data-row">
+            <span className="route-data-label">Bolt</span>
+            <span>{[...counts, materials.join('、'), installed].filter(Boolean).join(' · ')}</span>
+          </summary>
+          <BoltTable title="Bolt / Anchor" bolts={fixings} data={data}>
+            {route.anchorHardware.length > 0 && (
+              <ul className="plain small">
+                {route.anchorHardware.map((h, i) => (
+                  <li key={i}>
+                    {h.item}
+                    {h.quantity && ` ×${h.quantity}`}
+                    {h.spec && <span className="muted"> {h.spec}</span>}
+                    {h.installed && <span className="muted"> · {t('route.installedOn', { date: formatDate(h.installed) })}</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </BoltTable>
+        </details>
       )}
-      <button type="button" className="route-info-button" aria-expanded={open} aria-label={t('route.info')} title={t('route.info')} onClick={() => setOpen(!open)}>
-        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden>
-          <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
-          <path d="M12 11v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-          <circle cx="12" cy="7.6" r="1.3" fill="currentColor" />
-        </svg>
-      </button>
     </div>
   )
 }

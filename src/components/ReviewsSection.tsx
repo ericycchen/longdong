@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { relativeTime } from '../format'
 import { useLang, type MessageKey } from '../i18n'
 import { useCloud } from '../personal/sync'
@@ -59,8 +59,16 @@ const CommentIcon = () => (
   </svg>
 )
 
+const InfoIcon = () => (
+  <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden>
+    <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
+    <path d="M12 11v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    <circle cx="12" cy="7.6" r="1.3" fill="currentColor" />
+  </svg>
+)
+
 const SendIcon = () => (
-  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
+  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden>
     <path d="M3 20l18-8L3 4v6l12 2-12 2z" fill="currentColor" />
   </svg>
 )
@@ -84,23 +92,26 @@ function useRun() {
   return { busy, error, setError, run }
 }
 
-export type ReviewsSheet = 'rating' | 'comments'
+export type ReviewsSheet = 'rating' | 'comments' | 'info'
 
 /**
  * 評價與留言（像 IG 貼文下方）：只有圖示與數字（★ 平均星等、留言數），下面是最新一則留言的預覽。
  * 點星星從下方滑出評分（分佈、體感難度、自己打分），點留言圖示或預覽滑出留言（新的在下面，輸入框在最下方）。
  * 固定點（rateable 為 false）沒有評分，只有留言。sheet：目前打開的（標題卡上的星等也會打開評分）。
+ * info：說明以外的路線資料，有的話留言右邊多一個 ⓘ，點了從下方滑出。
  */
 export function ReviewsBar({
   routeId,
   rateable,
   sheet,
   onSheet,
+  info,
 }: {
   routeId: string
   rateable: boolean
   sheet?: ReviewsSheet
   onSheet: (sheet: ReviewsSheet | undefined) => void
+  info?: ReactNode
 }) {
   const social = useSocial()
   const comments = useComments(routeId)
@@ -122,6 +133,11 @@ export function ReviewsBar({
           <CommentIcon />
           {top.length > 0 && <span>{top.length}</span>}
         </button>
+        {info && (
+          <button type="button" className="reviews-icon info" aria-label={t('route.info')} onClick={() => onSheet('info')}>
+            <InfoIcon />
+          </button>
+        )}
       </div>
       {latest && (
         <button type="button" className="reviews-latest" onClick={() => onSheet('comments')}>
@@ -136,6 +152,11 @@ export function ReviewsBar({
       <Sheet open={sheet === 'comments'} onClose={() => onSheet(undefined)} title={t('comments.title')} className="comments-sheet">
         <CommentsPanel routeId={routeId} />
       </Sheet>
+      {info && (
+        <Sheet open={sheet === 'info'} onClose={() => onSheet(undefined)} title={t('route.info')}>
+          {info}
+        </Sheet>
+      )}
     </div>
   )
 }
@@ -399,9 +420,11 @@ function CommentsPanel({ routeId }: { routeId: string }) {
                             value={replyText}
                             onChange={(e) => setReplyText(e.target.value)}
                           />
-                          <button type="submit" className="send" disabled={busy || !replyText.trim()} aria-label={t('comments.send')} title={t('comments.send')}>
-                            <SendIcon />
-                          </button>
+                          {replyText.trim() && (
+                            <button type="submit" className="send" disabled={busy} aria-label={t('comments.send')} title={t('comments.send')}>
+                              <SendIcon />
+                            </button>
+                          )}
                         </form>
                       )}
                     </div>
@@ -424,10 +447,13 @@ function CommentsPanel({ routeId }: { routeId: string }) {
               send()
             }}
           >
-            <textarea rows={1} maxLength={COMMENT_MAX} placeholder={t('comments.placeholder')} value={text} onChange={(e) => setText(e.target.value)} />
-            <button type="submit" className="send" disabled={busy || !text.trim()} aria-label={t('comments.send')} title={t('comments.send')}>
-              <SendIcon />
-            </button>
+            <textarea rows={1} maxLength={COMMENT_MAX} aria-label={t('comments.title')} value={text} onChange={(e) => setText(e.target.value)} />
+            {/* 打了字才出現送出鍵 */}
+            {text.trim() && (
+              <button type="submit" className="send" disabled={busy} aria-label={t('comments.send')} title={t('comments.send')}>
+                <SendIcon />
+              </button>
+            )}
           </form>
         </div>
       )}

@@ -998,6 +998,9 @@ try {
   check('「更多」：分享、記錄攀登、編輯（路線說明）；手機版沒有修改記錄', items.includes('分享') && items.includes('記錄攀登') && items.some((x) => x.includes('路線說明')) && !items.includes('修改記錄'), items.join('|'))
   await rp.getByRole('menuitem', { name: '分享', exact: true }).click()
   check('分享：展開 LINE、Facebook、複製連結', (await rp.locator('.share-item').allTextContents()).join('|').includes('LINE') && (await rp.locator('.share-item').allTextContents()).join('|').includes('複製連結'))
+  const shareMenu = (await rp.locator('.tool-pop.menu').boundingBox())!
+  const cramped = await rp.locator('.share-item').evaluateAll((els) => els.some((el) => el.scrollWidth > el.clientWidth + 1))
+  check('分享選單夠寬：文字沒有擠在一起、沒有超出', shareMenu.width >= 190 && !cramped, `${shareMenu.width}`)
   await rp.getByRole('menuitem', { name: '記錄攀登' }).click()
   check('記錄攀登：打開視窗', (await rp.locator('.sheet[open]').count()) === 1 && (await rp.locator('.page-tools [role=menuitem]').count()) === 0)
   await rp.keyboard.press('Escape')
@@ -1106,24 +1109,35 @@ try {
   check('難度、長度、快扣、種類在標題卡裡（卡片外沒有另一列）', (await rp.locator('.area-hero .route-facts .route-grade').count()) === 1 && (await rp.locator('.route-facts').count()) === 1)
   check('路線頁的難度沒有難度底色', (await rp.locator('.route-facts .grade-pill').count()) === 0 && (await rp.locator('.route-facts .route-grade').evaluate((el) => getComputedStyle(el).backgroundColor)) === 'rgba(0, 0, 0, 0)')
   // 說明以外的資料（安全與拉測、首攀、備註、Bolt）整份收在說明下面，只有一個 ⓘ 按鈕
-  const infoButton = rp.locator('.route-info-button')
-  const afterText = await rp.evaluate(`(() => { const a = document.querySelector('.route-m .community-text'), b = document.querySelector('.route-m .route-info'); return !!b && (!a || !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)) })()`)
-  check('路線資料在說明下面，預設收起（只有 ⓘ 按鈕，沒有文字）', afterText === true && (await rp.locator('.route-info .route-data').count()) === 0 && ((await rp.locator('.route-info').textContent()) ?? '').trim() === '')
-  check('「更多」選單沒有路線資料', (await rp.locator('.tool-pop-info').count()) === 0)
-  await infoButton.click()
-  const infoLabels = await rp.locator('.route-info .route-data-label').allTextContents()
-  check('點 ⓘ：展開安全與拉測、Bolt（同一份）', infoLabels.includes('安全與拉測') && infoLabels.includes('Bolt') && ((await rp.locator('.route-info').textContent()) ?? '').includes('最近拉測'), infoLabels.join())
+  // 說明以外的資料（安全與拉測、首攀、備註、Bolt）：留言右邊的 ⓘ，點了從下方滑出（卡片裡沒有）
+  check('ⓘ 在留言圖示右邊，卡片裡沒有路線資料', ((await rp.locator('.reviews-bar-icons > button').evaluateAll((els) => els.map((el) => el.className))) as string[]).join() === 'reviews-icon rating,reviews-icon comments,reviews-icon info' && (await rp.locator('.route-m .route-data').count()) === 0)
+  await rp.locator('.reviews-icon.info').click()
+  const infoSheet = rp.locator('dialog.sheet[open]')
+  await infoSheet.locator('.route-data').waitFor()
+  const infoLabels = await infoSheet.locator('.route-data-label').allTextContents()
+  check('點 ⓘ：從下方滑出安全與拉測、Bolt（同一份）', infoLabels.includes('安全與拉測') && infoLabels.includes('Bolt') && ((await infoSheet.textContent()) ?? '').includes('最近拉測'), infoLabels.join())
   // 一整張卡片：標題卡沒有自己的底色與圓角、卡片裡沒有水平分隔線
   check('卡片沒有斷裂：標題卡透明、各段沒有水平分隔線', (await rp.locator('.route-m .area-hero').evaluate((el) => getComputedStyle(el).backgroundColor)) === 'rgba(0, 0, 0, 0)' && (await rp.locator('.route-m .route-block').evaluateAll((els) => els.every((el) => getComputedStyle(el).borderTopWidth === '0px'))))
   // 沒有任何評分：星星和留言圖示一樣是白色（不是星星色）
   const starColor = await rp.locator('.reviews-icon.rating svg').evaluate((el) => getComputedStyle(el).color)
   const commentColor = await rp.locator('.reviews-icon.comments svg').evaluate((el) => getComputedStyle(el).color)
   check('沒有任何評分：星星是白色', (await rp.locator('.reviews-icon.rating.rated').count()) === 0 && starColor === commentColor, `${starColor} / ${commentColor}`)
-  check('Bolt 只有摘要（幾支 bolt）、明細收起來', ((await rp.locator('.route-bolts summary').textContent()) ?? '').includes('支 bolt') && !(await rp.locator('.route-bolts table.bolts').isVisible()))
-  await rp.locator('.route-bolts summary').click()
-  const boltTable = (await rp.locator('.route-bolts table.bolts').boundingBox())!
-  const card = (await rp.locator('.route-m').boundingBox())!
-  check('點 Bolt：明細在下面展開、幾乎滿寬', boltTable.width >= card.width - 40, `${boltTable.width} / ${card.width}`)
+  check('Bolt 只有摘要（幾支 bolt）、明細收起來', ((await infoSheet.locator('.route-bolts summary').textContent()) ?? '').includes('支 bolt') && !(await infoSheet.locator('.route-bolts table.bolts').isVisible()))
+  await infoSheet.locator('.route-bolts summary').click()
+  const boltTable = (await infoSheet.locator('.route-bolts table.bolts').boundingBox())!
+  const sheetWidth = (await infoSheet.boundingBox())!.width
+  check('點 Bolt：明細在下面展開、幾乎滿寬', boltTable.width >= sheetWidth - 48, `${boltTable.width} / ${sheetWidth}`)
+  await rp.keyboard.press('Escape')
+  // 沒有任何路線資料（固定點、沒有首攀、備註、bolt）：沒有 ⓘ
+  type Bare = Safe & { firstAscent?: string; notes?: string }
+  const bare = (everyRoute as Bare[]).find((r) => r.isFixture && !r.firstAscent && !r.notes && r.bolts.length + r.anchors.length === 0)
+  if (bare) {
+    await rp.goto(base + `route/${bare.id}`)
+    await rp.waitForSelector('.reviews-bar')
+    check('沒有路線資料：沒有 ⓘ', (await rp.locator('.reviews-icon.info').count()) === 0)
+    await rp.goto(base + `route/${green.id}`)
+    await rp.waitForSelector('.reviews-bar')
+  }
   check('路線頁最下方有上一條／下一條，沒有「左右滑動可切換」', (await rp.locator('.pager a').count()) >= 1 && !((await rp.locator('.pager').textContent()) ?? '').includes('滑動'))
   check('上一條／下一條用那條路線所在分區的顏色', (await rp.locator('.pager a.colored').count()) >= 1)
   // 電腦版：路線頁右上沒有 ×
@@ -1136,7 +1150,7 @@ try {
   // 評價與留言（像 IG）：只有圖示與數字（★ 平均、留言數），下面是最新一則的預覽，沒有文字標籤
   await rp.waitForSelector('.reviews-latest')
   const bar = ((await rp.locator('.reviews-bar-icons').textContent()) ?? '').trim()
-  check('評價與留言：只有圖示與數字（沒有「評價與留言」「則留言」等文字）', /^[\d.\s]+$/.test(bar) && (await rp.locator('.reviews-icon svg').count()) === 2 && (await rp.locator('.reviews').count()) === 0, bar)
+  check('評價與留言：只有圖示與數字（沒有「評價與留言」「則留言」等文字）', /^[\d.\s]+$/.test(bar) && (await rp.locator('.reviews-icon svg').count()) >= 2 && (await rp.locator('.reviews').count()) === 0, bar)
   check('評價與留言：預覽最新一則', ((await rp.locator('.reviews-latest').textContent()) ?? '').includes('e2e 留言 5'))
   // 評分：點星星從下方滑出；點一顆星評分，再點同一顆取消（沒有「你的評分」「刪除我的評分」）
   await rp.locator('.reviews-icon.rating').click()
@@ -1162,7 +1176,11 @@ try {
   const sheetBox = (await rp.locator('dialog.comments-sheet').boundingBox())!
   const composeBox = (await rp.locator('.comments-sheet .review-compose').boundingBox())!
   check('新增留言在最下面', Math.abs(composeBox.y + composeBox.height - (sheetBox.y + sheetBox.height)) <= 2 && (await rp.locator('.comments-sheet .review-compose .star-picker').count()) === 0, `${composeBox.y + composeBox.height} / ${sheetBox.y + sheetBox.height}`)
+  // 輸入框一行、沒有提示文字；打了字才出現送出鍵
+  const composeHeight = (await rp.locator('.comments-sheet .comment-m-form').boundingBox())!.height
+  check('留言輸入框：一行、沒有提示文字、沒打字時沒有送出鍵', composeHeight <= 44 && !(await rp.locator('.review-compose textarea').getAttribute('placeholder')) && (await rp.locator('.review-compose .send').count()) === 0, `${composeHeight}`)
   await rp.locator('.review-compose textarea').fill('e2e 新留言')
+  check('打了字才出現送出鍵', (await rp.locator('.review-compose .send').count()) === 1)
   await rp.locator('.review-compose .send').click()
   const posted = await until(async () => (((await rp.locator('.reviews .comment-m-list > li').last().textContent()) ?? '').includes('e2e 新留言') ? true : undefined))
   check('送出留言：出現在最下面', posted === true)

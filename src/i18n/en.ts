@@ -456,7 +456,6 @@ export const en: Messages = {
   'comments.reportPrompt': 'Reason (optional)',
   'comments.reported': 'Reported',
   'comments.reportError': 'Couldn’t report ({error})',
-  'comments.placeholder': 'Beta, conditions, rock or bolt issues…',
   'comments.send': 'Post',
   'comments.delete': 'Delete',
   'comments.report': 'Report',
