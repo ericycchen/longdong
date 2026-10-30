@@ -652,6 +652,8 @@ export const zh = {
   'topo.fork': '從其他路線分岔',
   'topo.forkPick': '點分岔的點',
   'topo.clearRoute': '清除',
+  'topo.routes': '路線',
+  'topo.clearThisRoute': '清除這條路線',
   'topo.history': '修改記錄',
   'topo.noHistory': '還沒有人標記',
   'topo.current': '目前版本',

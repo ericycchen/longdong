@@ -13,7 +13,7 @@ import type { ToolScope } from '../edit/PageTools'
 import { textTarget } from '../edit/textEdits'
 import { formatDate, quickdraws, typeLabel } from '../format'
 import { localName, useLang, type Lang, type Translate } from '../i18n'
-import { useState, type CSSProperties, type ReactNode } from 'react'
+import { lazy, Suspense, useState, type CSSProperties, type ReactNode } from 'react'
 import { useWide } from '../layout'
 import { useCloud } from '../personal/sync'
 import { href, useRouteLink } from '../router'
@@ -23,11 +23,17 @@ import { RouteTopos } from '../topo/TopoSection'
 import { useSocial } from '../social/store'
 import { areaSectorColor, NotFound } from './AreaPage'
 
+// 編輯器只有要編輯時才載入
+const RouteTopoEditor = lazy(() => import('../topo/TopoEditor').then((m) => ({ default: m.RouteTopoEditor })))
+
+/** 手機版就地編輯的項目：說明（卡片裡）、Topo（photo：長按的那一張；從選單進入時不指定） */
+type Editing = { kind: 'text' } | { kind: 'topo'; photo?: string }
+
 /**
  * 路線頁（手機版與電腦版的右側相同）：整頁是一張路線卡片。上方是標題卡（與區域、分區頁相同；右上是收藏、回報位置、更多），
  * 名稱下面是難度、長度、快扣、種類；接著是安全與狀態合併的一個色塊、Topo、說明（直接顯示內容）、路線資料（安全與拉測、首攀、
  * Bolt 的摘要，明細點了才展開）；最後是評價與留言（預設收起，只看到摘要與最新一則）。
- * 手機版點說明進入說明編輯，長按 Topo 進入 Topo 編輯；左右滑動換到上一張、下一張卡片。
+ * 手機版點說明在卡片裡編輯，長按 Topo 打開整個畫面的 Topo 編輯器（都不換頁；「更多」選單的編輯也一樣）；左右滑動換到上一張、下一張卡片。
  */
 /**
  * topoInList：電腦版左邊的分區清單已經顯示這個分區的 Topo（選到的路線在上面亮色、可以切換 bolt），這裡不再重複顯示同一張。
@@ -41,6 +47,7 @@ export function RoutePage({ data, id, topoInList }: { data: LoadedData; id: stri
   const rating = summarize(useSocial().ratings[routeKey(id)])
   const [tickOpen, setTickOpen] = useState(false)
   const [reviews, setReviews] = useState<ReviewsSheet>()
+  const [editing, setEditing] = useState<Editing>()
   const wide = useWide()
   if (!ref) return <NotFound />
   const { route, sector, area } = ref
@@ -82,6 +89,7 @@ export function RoutePage({ data, id, topoInList }: { data: LoadedData; id: stri
             signedIn={signedIn}
             scope={scope}
             onTick={route.isFixture ? undefined : () => setTickOpen(true)}
+            inlineEdit={wide ? undefined : { text: () => setEditing({ kind: 'text' }), topo: () => setEditing({ kind: 'topo' }) }}
           />
         }
         shape={<SectorShape area={area} sector={sector} color={areaSectorColor(area, sector)} single className="area-hero-shape" />}
@@ -92,9 +100,20 @@ export function RoutePage({ data, id, topoInList }: { data: LoadedData; id: stri
 
       {signedIn && !route.isFixture && <PersonalPanel route={route} open={tickOpen} onClose={() => setTickOpen(false)} />}
 
-      {!topoInList && <RouteTopos sector={sector} routeId={route.id} editable={!wide} />}
+      {!topoInList && <RouteTopos sector={sector} routeId={route.id} onEdit={wide ? undefined : (photo) => setEditing({ kind: 'topo', photo })} />}
 
-      <CommunityText target={textTarget.route(route.id)} original={route.description} editTo={wide ? undefined : href.edit('text', textTarget.route(route.id))} />
+      <CommunityText
+        target={textTarget.route(route.id)}
+        original={route.description}
+        editing={editing?.kind === 'text'}
+        onEdit={wide ? undefined : (on) => setEditing(on ? { kind: 'text' } : undefined)}
+      />
+
+      {!wide && editing?.kind === 'topo' && (
+        <Suspense>
+          <RouteTopoEditor data={data} sector={sector} routeId={route.id} photo={editing.photo} onClose={() => setEditing(undefined)} />
+        </Suspense>
+      )}
 
 
       {pitches.length > 1 && (

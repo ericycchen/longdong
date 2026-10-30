@@ -4,10 +4,10 @@ import { useIsAdmin } from '../admin'
 import { GradePill } from '../components/GradePill'
 import { SignInPrompt } from '../components/SignInPrompt'
 import type { LoadedData } from '../data/dataset'
-import type { Route } from '../data/schema'
+import type { Route, Sector } from '../data/schema'
 import { relativeTime } from '../format'
 import { localName, useLang } from '../i18n'
-import { useCoarse } from '../layout'
+import { useCoarse, useWide } from '../layout'
 import { NotFound } from '../pages/AreaPage'
 import { useCloud } from '../personal/sync'
 import { href, navigate } from '../router'
@@ -15,22 +15,41 @@ import { displayName, useSocial } from '../social/store'
 import { removeEdit, removeTopo, submitEdit } from './actions'
 import { CropBox } from './CropBox'
 import { addLinePoint, fillShared, forkLine, moveSharedPoint, syncShared } from './lines'
-import { boltPositions, isFullCrop, SCALE, sameCrop, sameMarks, toCropPoint, type Crop, type Marks, type Point, type RouteMarks, type TopoEdit, type TopoPhoto } from './model'
+import { boltPositions, FULL_CROP, isFullCrop, SCALE, sameCrop, sameMarks, toCropPoint, type Crop, type Marks, type Point, type RouteMarks, type TopoEdit, type TopoPhoto } from './model'
 import { HistorySection } from '../edit/HistorySection'
 import { EditKeys } from '../edit/KeyList'
-import { loadEdits, loadPhotos, useTopoState } from './store'
+import { loadEdits, loadPhotos, useSectorTopos, useTopoState } from './store'
 import { routeLabels } from './TopoSection'
 import { px, routeInfo, TopoFrame, TopoLines } from './TopoView'
+import { UploadButton } from './TopoUpload'
 import { ZoomPane } from './ZoomPane'
+import '../edit/edit.css'
 
 /**
  * Topo 編輯（電腦、手機）：照片上標記線段（由起攀點往上）與 bolt，另外選路線；手機的單指、雙指手勢在 ZoomPane。
  * 修改先存在這台裝置的草稿，按「提交」才上傳成新的版本；所有版本都保留，可以預覽、從舊版本繼續修改。
+ * 手機版（窄螢幕）是整個畫面的編輯器（PhoneShell）：上面關閉、目前路線、提交，下面是拇指按得到的工具；onClose 回到原來的畫面。
+ * initial：一開始選的路線（從路線頁進來時是那條路線）。
  */
-export function TopoEditor({ data, id, embedded, side }: { data: LoadedData; id: string; embedded?: boolean; side: HTMLElement | null }) {
+export function TopoEditor({
+  data,
+  id,
+  embedded,
+  side,
+  initial,
+  onClose,
+}: {
+  data: LoadedData
+  id: string
+  embedded?: boolean
+  side: HTMLElement | null
+  initial?: string
+  onClose: () => void
+}) {
   const { lang, t } = useLang()
   const cloud = useCloud()
   const state = useTopoState()
+  const phone = !useWide()
   useEffect(() => {
     void loadPhotos()
     void loadEdits(id)
@@ -38,8 +57,20 @@ export function TopoEditor({ data, id, embedded, side }: { data: LoadedData; id:
 
   const photo = state.photos?.[id]
   const edits = state.edits[id]
-  if (!state.photos || !edits) return <p className="empty muted">{t('app.loading')}</p>
   const found = photo && data.sectorById.get(photo.sector)
+  const signedIn = cloud.status === 'signed-in'
+  if (phone && !(edits && found && signedIn))
+    return (
+      <PhoneShell onClose={onClose}>
+        <header className="topo-phone-top">
+          <CloseButton onClose={onClose} />
+        </header>
+        <div className="topo-phone-message">
+          {!state.photos || !edits ? <p className="muted">{t('app.loading')}</p> : !found ? <NotFound /> : cloud.status !== 'loading' && <SignInPrompt />}
+        </div>
+      </PhoneShell>
+    )
+  if (!state.photos || !edits) return <p className="empty muted">{t('app.loading')}</p>
   if (!photo || !found) return <NotFound />
   const { sector, area } = found
 
@@ -58,8 +89,96 @@ export function TopoEditor({ data, id, embedded, side }: { data: LoadedData; id:
       {cloud.status !== 'signed-in' ? (
         cloud.status !== 'loading' && <SignInPrompt />
       ) : (
-        <Editor photo={photo} edits={edits} routes={sector.routes} labels={routeLabels(sector)} uid={cloud.user!.uid} side={side} />
+        <Editor
+          photo={photo}
+          edits={edits}
+          routes={sector.routes}
+          labels={routeLabels(sector)}
+          uid={cloud.user!.uid}
+          side={side}
+          initial={initial}
+          onClose={phone ? onClose : undefined}
+        />
       )}
+    </div>
+  )
+}
+
+/**
+ * 手機路線頁的 Topo 編輯（不換頁）：photo 沒指定時用標了這條路線的第一張，沒有就用分區的第一張；
+ * 分區還沒有照片時先上傳，上傳完接著編輯那一張。
+ */
+export function RouteTopoEditor({ data, sector, routeId, photo, onClose }: { data: LoadedData; sector: Sector; routeId: string; photo?: string; onClose: () => void }) {
+  const { t } = useLang()
+  const cloud = useCloud()
+  const topos = useSectorTopos(sector.id)
+  const [uploaded, setUploaded] = useState<string>()
+  const id = photo ?? uploaded ?? (topos?.find((x) => x.latest?.marks[routeId]) ?? topos?.[0])?.photo.id
+  if (id) return <TopoEditor data={data} id={id} side={null} initial={routeId} onClose={onClose} />
+  return (
+    <PhoneShell onClose={onClose}>
+      <header className="topo-phone-top">
+        <CloseButton onClose={onClose} />
+      </header>
+      <div className="topo-phone-message">
+        {!topos || cloud.status === 'loading' ? (
+          <p className="muted">{t('app.loading')}</p>
+        ) : cloud.status === 'signed-in' ? (
+          <UploadButton sector={sector.id} onUploaded={setUploaded} />
+        ) : (
+          <SignInPrompt />
+        )}
+      </div>
+    </PhoneShell>
+  )
+}
+
+/**
+ * 手機版的編輯畫面：蓋住整個頁面（dialog），返回鍵（Esc）關閉；
+ * 觸控不往外傳：App 的左右滑動換頁（swipe.ts）掛在外層，編輯時的拖曳、縮放不能換頁。
+ */
+function PhoneShell({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLDialogElement>(null)
+  useEffect(() => {
+    const el = ref.current!
+    el.showModal()
+    const stop = (e: Event) => e.stopPropagation()
+    const events = ['touchstart', 'touchmove', 'touchend', 'touchcancel']
+    for (const name of events) el.addEventListener(name, stop)
+    return () => {
+      for (const name of events) el.removeEventListener(name, stop)
+    }
+  }, [])
+  return (
+    <dialog
+      ref={ref}
+      className="topo-phone"
+      onCancel={(e) => {
+        e.preventDefault()
+        onClose()
+      }}
+    >
+      {children}
+    </dialog>
+  )
+}
+
+function CloseButton({ onClose }: { onClose: () => void }) {
+  const { t } = useLang()
+  return (
+    <button type="button" className="topo-phone-close" aria-label={t('layout.close')} onClick={onClose}>
+      <Icon d="M6 6l12 12M18 6 6 18" />
+    </button>
+  )
+}
+
+/** 從下方滑出的面板（路線清單、更多）：點外面關閉 */
+function Sheet({ label, onClose, children }: { label: string; onClose: () => void; children: ReactNode }) {
+  return (
+    <div className="topo-sheet-backdrop" onClick={onClose}>
+      <div className="topo-sheet" role="dialog" aria-label={label} onClick={(e) => e.stopPropagation()}>
+        {children}
+      </div>
     </div>
   )
 }
@@ -93,6 +212,8 @@ interface Draft {
 
 /** 手指按得到的範圍（半徑，螢幕像素）：比看得到的點大，不必按得很準 */
 const HIT_R = 22
+/** 手指點在點旁邊這個距離內（螢幕像素，比 HIT_R 寬）：選取那個點，不加新的點 */
+const NEAR_R = 36
 const draftKey = (photo: string) => `longdong.topoDraft.${photo}`
 
 function readDraft(photo: string): Draft | undefined {
@@ -120,6 +241,8 @@ function Editor({
   labels,
   uid,
   side,
+  initial,
+  onClose,
 }: {
   photo: TopoPhoto
   edits: TopoEdit[]
@@ -127,6 +250,9 @@ function Editor({
   labels: Map<string, string>
   uid: string
   side: HTMLElement | null
+  initial?: string
+  /** 手機版：整個畫面的編輯器，關閉時呼叫 */
+  onClose?: () => void
 }) {
   const { lang, t } = useLang()
   const isAdmin = useIsAdmin()
@@ -136,7 +262,7 @@ function Editor({
   const latest = edits.at(-1)
   const [draft, setDraftState] = useState<Draft | undefined>(() => readDraft(photo.id))
   const [preview, setPreview] = useState<TopoEdit>()
-  const [selected, setSelected] = useState<string | undefined>(routes.find((r) => r.number)?.id)
+  const [selected, setSelected] = useState<string | undefined>(initial ?? routes.find((r) => r.number)?.id)
   const [mode, setMode] = useState<Mode>('line')
   const [boltPos, setBoltPos] = useState<string>()
   const [forking, setForking] = useState(false)
@@ -145,6 +271,8 @@ function Editor({
   const [saved, setSaved] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
+  /** 手機版從下方滑出的面板 */
+  const [sheet, setSheet] = useState<'routes' | 'more'>()
   // 全畫面：只放大編輯區（工具列與照片），用瀏覽器的全螢幕
   const layoutRef = useRef<HTMLDivElement>(null)
   const [full, setFull] = useState(false)
@@ -295,8 +423,23 @@ function Editor({
     return toCropPoint(crop, (e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height)
   }
 
+  /** 手指點的位置附近（NEAR_R 內）最近的點；放大後點與點之間夠遠，照樣能在旁邊加點 */
+  const nearPoint = (e: { clientX: number; clientY: number }, svg: SVGSVGElement): number => {
+    const r = svg.getBoundingClientRect()
+    const c = crop ?? FULL_CROP
+    let best = -1
+    let bestDistance = NEAR_R
+    current.line?.forEach(([x, y], i) => {
+      const d = Math.hypot(r.left + ((x - c.x) / c.w) * r.width - e.clientX, r.top + ((y - c.y) / c.h) * r.height - e.clientY)
+      if (d <= bestDistance) [best, bestDistance] = [i, d]
+    })
+    return best
+  }
+
   const onPhotoClick = (e: ReactMouseEvent<SVGSVGElement>) => {
     if (preview || mode === 'crop' || isForking || !selected || dragging.current) return
+    const near = coarse && mode === 'line' ? nearPoint(e, e.currentTarget) : -1
+    if (near >= 0) return setPicked({ kind: 'line', index: near, at: current.line![near] })
     const p = pointAt(e, e.currentTarget)
     setPicked(undefined)
     if (mode === 'line') editMarks((all) => addLinePoint(all, selected, p, photo.width / photo.height))
@@ -508,6 +651,203 @@ function Editor({
     </button>
   )
 
+  const undoIcon = <Icon d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3" />
+  const redoIcon = <Icon d="m15 14 5-5-5-5M20 9H10a6 6 0 0 0 0 12h3" />
+
+  const positionsRow = mode === 'bolt' && route && (
+    <div className="topo-tool-group topo-positions" role="group" aria-label={t('topo.boltPosition')}>
+      {positions.map((p) => (
+        <button key={p} type="button" className={current.bolts?.[p] ? 'chip placed' : 'chip'} aria-pressed={p === placing} onClick={() => setBoltPos(p)}>
+          {p}
+        </button>
+      ))}
+    </div>
+  )
+
+  const photoPane = (
+    <ZoomPane>
+      {(zoom) => (
+        <TopoFrame
+          photo={photo}
+          alt=""
+          crop={shownCrop}
+          svgProps={{ className: preview ? undefined : `editing ${mode}`, onClick: onPhotoClick, onContextMenu: (e) => e.preventDefault() }}
+        >
+          {(frameK) => {
+            // 放大後線、點、把手維持相同的螢幕大小
+            const k = frameK / zoom
+            return (
+              <>
+                <TopoLines photo={photo} marks={marks} labels={labels} k={k} highlight={selected} info={info} crop={shownCrop} />
+                {handles(k)}
+                {forkPoints(k)}
+                {cropping && <CropBox photo={photo} crop={crop} k={k} onChange={setCrop} />}
+              </>
+            )
+          }}
+        </TopoFrame>
+      )}
+    </ZoomPane>
+  )
+
+  /** 路線清單；after：選了之後（手機版關掉清單） */
+  const routeList = (after?: () => void) => (
+    <ul className="topo-route-list">
+      {routes.map((r) => {
+        const m = marks[r.id]
+        const bolts = Object.keys(m?.bolts ?? {}).length
+        const total = boltPositions(r).length
+        return (
+          <li key={r.id}>
+            <button className={`topo-route-row${r.id === selected ? ' on' : ''}`} onClick={() => (pick(r.id), after?.())}>
+              <span className="topo-route-no">{r.number ?? '·'}</span>
+              <span className="topo-route-name">{localName(r.name, lang).main}</span>
+              <GradePill grade={r.grade} value={r.gradeValue} size="sm" />
+              <span className="topo-route-state muted small">{[m?.line && '●', total > 0 && bolts > 0 && `${bolts}/${total}`].filter(Boolean).join(' ')}</span>
+            </button>
+          </li>
+        )
+      })}
+    </ul>
+  )
+
+  /** 修改記錄：點一個版本預覽；after：選了之後（手機版關掉面板，看得到照片） */
+  const history = (after?: () => void) => (
+    <HistorySection title={t('topo.history')}>
+      <div className="topo-history">
+        {edits.length === 0 ? (
+          <p className="muted small">{t('topo.noHistory')}</p>
+        ) : (
+          <ul>
+            {[...edits].reverse().map((e) => (
+              <li key={e.id} className={preview?.id === e.id ? 'on' : undefined}>
+                <button className="link-button" onClick={() => (setPreview(preview?.id === e.id ? undefined : e), after?.())}>
+                  {relativeTime(new Date(e.createdAt).toISOString(), t)} · {displayName(profiles, e.uid)}
+                </button>
+                <span className="muted small"> {t('count.routesShort', { n: Object.keys(e.marks).length })}</span>
+                {e === latest && <span className="muted small"> · {t('topo.current')}</span>}
+                {(e.uid === uid || isAdmin) && (
+                  <button className="link-button topo-history-delete" onClick={() => void deleteEdit(e)}>
+                    {t('topo.delete')}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+        {(photo.uid === uid || isAdmin) && (
+          <button className="link-button danger" onClick={() => void deletePhoto()}>
+            {t('topo.deletePhoto')}
+          </button>
+        )}
+      </div>
+    </HistorySection>
+  )
+
+  const restorePreview = () => {
+    record(base())
+    setDraft({ base: latest?.id, marks: preview!.marks, ...(preview!.crop ? { crop: preview!.crop } : {}) })
+    setPreview(undefined)
+  }
+
+  if (onClose) {
+    const closeSheet = () => setSheet(undefined)
+    const status = error ?? (needRoute ? t('topo.needRoute') : changed && draft?.base !== latest?.id ? t('topo.newerVersion') : undefined)
+    return (
+      <PhoneShell onClose={onClose}>
+        <header className="topo-phone-top">
+          <CloseButton onClose={onClose} />
+          <div className="topo-phone-route">
+            {tool(t('topo.keys.prevRoute'), undefined, () => stepRoute(-1), { iconOnly: true, icon: <Icon d="m15 6-6 6 6 6" /> })}
+            <button type="button" className="topo-phone-route-name" aria-haspopup="dialog" onClick={() => setSheet('routes')}>
+              <b>{route?.number ?? '·'}</b>
+              <span>{route && localName(route.name, lang).main}</span>
+            </button>
+            {tool(t('topo.keys.nextRoute'), undefined, () => stepRoute(1), { iconOnly: true, icon: <Icon d="m9 6 6 6-6 6" /> })}
+          </div>
+          <button type="button" className="edit-btn primary" disabled={!changed || needRoute || busy || !!preview} onClick={() => void submit()}>
+            {busy ? t('topo.submitting') : saved && !changed ? t('topo.saved') : t('topo.submit')}
+          </button>
+        </header>
+        {status && (
+          <p className="topo-phone-status warn-text" role="status">
+            {status}
+          </p>
+        )}
+        <div className="topo-edit-photo" style={{ '--fit-aspect': fitAspect } as CSSProperties}>
+          {photoPane}
+        </div>
+        <footer className="topo-phone-bar" role="toolbar" aria-label={t('topo.toolbar')}>
+          {preview ? (
+            <div className="topo-phone-row">
+              <span className="topo-phone-note">{t('topo.previewing', { time: relativeTime(new Date(preview.createdAt).toISOString(), t), name: displayName(profiles, preview.uid) })}</span>
+              <button type="button" className="edit-btn" onClick={() => setPreview(undefined)}>
+                {t('topo.backToEditing')}
+              </button>
+              <button type="button" className="edit-btn primary" onClick={restorePreview}>
+                {t('topo.restore')}
+              </button>
+            </div>
+          ) : cropping ? (
+            <div className="topo-phone-row">
+              {tool(t('topo.cropReset'), undefined, () => setCrop({ x: 0, y: 0, w: 10000, h: 10000 }, true), { disabled: isFullCrop(crop) })}
+              <span className="edit-spacer" />
+              <button type="button" className="edit-btn primary" onClick={() => setMode('line')}>
+                {t('topo.cropDone')}
+              </button>
+            </div>
+          ) : isForking ? (
+            <div className="topo-phone-row">
+              <span className="topo-phone-note">{t('topo.forkPick')}</span>
+              <button type="button" className="edit-btn" onClick={() => setForking(false)}>
+                {t('action.cancel')}
+              </button>
+            </div>
+          ) : (
+            <>
+              {positionsRow}
+              <div className="topo-phone-row">
+                <div className="topo-phone-modes" role="group" aria-label={t('topo.tools')}>
+                  {tool(t('topo.modeLine'), undefined, () => setMode('line'), { pressed: mode === 'line', disabled: !route })}
+                  {tool('Bolt', undefined, () => setMode('bolt'), { pressed: mode === 'bolt', disabled: positions.length === 0 })}
+                </div>
+                <span className="edit-spacer" />
+                {tool(t('topo.undo'), undefined, undoOnce, { disabled: undo.current.length === 0, icon: undoIcon, iconOnly: true })}
+                {tool(t('topo.redo'), undefined, redoOnce, { disabled: redo.current.length === 0, icon: redoIcon, iconOnly: true })}
+                {tool(t('topo.deletePoint'), undefined, removePicked, { disabled: !pickedLive, icon: <Icon d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />, iconOnly: true })}
+                {tool(t('route.actionsMore'), undefined, () => setSheet('more'), { icon: <Icon d="M5 12h.01M12 12h.01M19 12h.01" />, iconOnly: true })}
+              </div>
+            </>
+          )}
+        </footer>
+        {sheet === 'routes' && (
+          <Sheet label={t('topo.routes')} onClose={closeSheet}>
+            {routeList(closeSheet)}
+          </Sheet>
+        )}
+        {sheet === 'more' && (
+          <Sheet label={t('route.actionsMore')} onClose={closeSheet}>
+            <div className="topo-sheet-menu">
+              <button type="button" disabled={!canFork} onClick={() => (setForking(true), closeSheet())}>
+                {t('topo.fork')}
+              </button>
+              <button type="button" onClick={() => (setMode('crop'), closeSheet())}>
+                {t('topo.modeCrop')}
+              </button>
+              <button type="button" disabled={!route || !marks[route.id]} onClick={() => (edit(() => ({})), closeSheet())}>
+                {t('topo.clearThisRoute')}
+              </button>
+              <button type="button" disabled={!draft || busy} onClick={() => (discard(), closeSheet())}>
+                {t('topo.discard')}
+              </button>
+            </div>
+            {history(closeSheet)}
+          </Sheet>
+        )}
+      </PhoneShell>
+    )
+  }
+
   return (
     <div className="topo-edit-layout" ref={layoutRef}>
       {!preview && (
@@ -515,8 +855,8 @@ function Editor({
           {/* 只有一列：最常用的在最前面（復原、重做），接著是工具；目前工具要用的選項接在同一列，最右邊是提交 */}
           <div className="topo-tools-row">
           <div className="topo-tool-group">
-            {tool(t('topo.undo'), 'Z', undoOnce, { disabled: undo.current.length === 0, icon: <Icon d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3" /> })}
-            {tool(t('topo.redo'), 'Y', redoOnce, { disabled: redo.current.length === 0, icon: <Icon d="m15 14 5-5-5-5M20 9H10a6 6 0 0 0 0 12h3" /> })}
+            {tool(t('topo.undo'), 'Z', undoOnce, { disabled: undo.current.length === 0, icon: undoIcon })}
+            {tool(t('topo.redo'), 'Y', redoOnce, { disabled: redo.current.length === 0, icon: redoIcon })}
           </div>
           <div className="topo-tool-group" role="group" aria-label={t('topo.tools')}>
             {tool(t('topo.modeLine'), 'L', () => setMode('line'), { pressed: mode === 'line', disabled: !route })}
@@ -524,15 +864,7 @@ function Editor({
             {tool(t('topo.modeCrop'), 'C', () => setMode('crop'), { pressed: mode === 'crop' })}
             {tool(t('topo.fork'), 'F', () => setForking((on) => !on), { pressed: isForking, disabled: !canFork && !isForking })}
           </div>
-          {mode === 'bolt' && route && (
-            <div className="topo-tool-group topo-positions" role="group" aria-label={t('topo.boltPosition')}>
-              {positions.map((p) => (
-                <button key={p} type="button" className={current.bolts?.[p] ? 'chip placed' : 'chip'} aria-pressed={p === placing} onClick={() => setBoltPos(p)}>
-                  {p}
-                </button>
-              ))}
-            </div>
-          )}
+          {positionsRow}
           {isForking && <span className="edit-status">{t('topo.forkPick')}</span>}
           {mode === 'crop' && (
             <div className="topo-tool-group">
@@ -568,29 +900,7 @@ function Editor({
           <Icon d={full ? 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5' : 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5'} />
         </button>
         )}
-        <ZoomPane>
-          {(zoom) => (
-            <TopoFrame
-              photo={photo}
-              alt=""
-              crop={shownCrop}
-              svgProps={{ className: preview ? undefined : `editing ${mode}`, onClick: onPhotoClick, onContextMenu: (e) => e.preventDefault() }}
-            >
-              {(frameK) => {
-                // 放大後線、點、把手維持相同的螢幕大小
-                const k = frameK / zoom
-                return (
-                  <>
-                    <TopoLines photo={photo} marks={marks} labels={labels} k={k} highlight={selected} info={info} crop={shownCrop} />
-                    {handles(k)}
-                    {forkPoints(k)}
-                    {cropping && <CropBox photo={photo} crop={crop} k={k} onChange={setCrop} />}
-                  </>
-                )
-              }}
-            </TopoFrame>
-          )}
-        </ZoomPane>
+        {photoPane}
       </div>
 
       {side &&
@@ -599,14 +909,7 @@ function Editor({
             {preview ? (
               <div className="topo-edit-bar notice">
                 <span>{t('topo.previewing', { time: relativeTime(new Date(preview.createdAt).toISOString(), t), name: displayName(profiles, preview.uid) })}</span>
-                <button
-                  className="action"
-                  onClick={() => {
-                    record(base())
-                    setDraft({ base: latest?.id, marks: preview.marks, ...(preview.crop ? { crop: preview.crop } : {}) })
-                    setPreview(undefined)
-                  }}
-                >
+                <button className="action" onClick={restorePreview}>
                   {t('topo.restore')}
                 </button>
                 <button className="action" onClick={() => setPreview(undefined)}>
@@ -617,56 +920,12 @@ function Editor({
             {changed && draft?.base !== latest?.id && <p className="small warn-text">{t('topo.newerVersion')}</p>}
             {error && <p className="small error">{error}</p>}
 
-            <ul className="topo-route-list">
-              {routes.map((r) => {
-                const m = marks[r.id]
-                const bolts = Object.keys(m?.bolts ?? {}).length
-                const total = boltPositions(r).length
-                return (
-                  <li key={r.id}>
-                    <button className={`topo-route-row${r.id === selected ? ' on' : ''}`} onClick={() => pick(r.id)}>
-                      <span className="topo-route-no">{r.number ?? '·'}</span>
-                      <span className="topo-route-name">{localName(r.name, lang).main}</span>
-                      <GradePill grade={r.grade} value={r.gradeValue} size="sm" />
-                      <span className="topo-route-state muted small">{[m?.line && '●', total > 0 && bolts > 0 && `${bolts}/${total}`].filter(Boolean).join(' ')}</span>
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
+            {routeList()}
 
             {/* 其他快捷鍵都標在上方工具列的按鈕上；這裡只留沒有按鈕的操作 */}
             {!preview && <EditKeys rows={[{ keys: t('topo.keys.rightClick'), label: t('topo.keys.deletePoint') }]} />}
 
-            <HistorySection title={t('topo.history')}>
-              <div className="topo-history">
-                {edits.length === 0 ? (
-                  <p className="muted small">{t('topo.noHistory')}</p>
-                ) : (
-                  <ul>
-                    {[...edits].reverse().map((e) => (
-                      <li key={e.id} className={preview?.id === e.id ? 'on' : undefined}>
-                        <button className="link-button" onClick={() => setPreview(preview?.id === e.id ? undefined : e)}>
-                          {relativeTime(new Date(e.createdAt).toISOString(), t)} · {displayName(profiles, e.uid)}
-                        </button>
-                        <span className="muted small"> {t('count.routesShort', { n: Object.keys(e.marks).length })}</span>
-                        {e === latest && <span className="muted small"> · {t('topo.current')}</span>}
-                        {(e.uid === uid || isAdmin) && (
-                          <button className="link-button topo-history-delete" onClick={() => void deleteEdit(e)}>
-                            {t('topo.delete')}
-                          </button>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {(photo.uid === uid || isAdmin) && (
-                  <button className="link-button danger" onClick={() => void deletePhoto()}>
-                    {t('topo.deletePhoto')}
-                  </button>
-                )}
-              </div>
-            </HistorySection>
+            {history()}
           </div>,
           side,
         )}

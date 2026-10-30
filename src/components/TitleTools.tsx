@@ -12,7 +12,7 @@ import { ShareItems } from './ShareItems'
  * 區域、分區、路線頁標題卡右上的工具：收藏、回報位置（都是圖示），「更多」選單：分享、記錄攀登（路線）、編輯、
  * 修改記錄（電腦版、有修改記錄才顯示）。收藏與記錄攀登要登入。
  * favoriteId：收藏的對象（路線、區域或分區的 ID；固定點不能收藏時 undefined）；report：回報位置的對象；
- * onTick：打開記錄攀登的視窗（只有路線）。
+ * onTick：打開記錄攀登的視窗（只有路線）；inlineEdit：在這一頁就地編輯的項目（手機路線頁的說明、Topo），選了不換頁。
  */
 export function TitleTools({
   data,
@@ -22,6 +22,7 @@ export function TitleTools({
   signedIn,
   scope,
   onTick,
+  inlineEdit,
 }: {
   data: LoadedData
   favoriteId?: string
@@ -30,6 +31,7 @@ export function TitleTools({
   signedIn: boolean
   scope: ToolScope
   onTick?: () => void
+  inlineEdit?: Partial<Record<string, () => void>>
 }) {
   const { t } = useLang()
   const personal = usePersonal()
@@ -107,11 +109,19 @@ export function TitleTools({
                 {t('tick.menu')}
               </button>
             )}
-            {edits.map((o) => (
-              <a key={o.key} role="menuitem" href={o.to}>
-                {t('tools.edit')}：{o.label}
-              </a>
-            ))}
+            {edits.map((o) => {
+              const label = `${t('tools.edit')}：${o.label}`
+              const here = inlineEdit?.[o.key]
+              return here ? (
+                <button key={o.key} type="button" role="menuitem" onClick={() => (close(), here())}>
+                  {label}
+                </button>
+              ) : (
+                <a key={o.key} role="menuitem" href={o.to}>
+                  {label}
+                </a>
+              )
+            })}
             {wide && history.entries.length > 0 && (
               <button
                 type="button"

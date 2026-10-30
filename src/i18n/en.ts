@@ -655,6 +655,8 @@ export const en: Messages = {
   'topo.fork': 'Branch from another route',
   'topo.forkPick': 'Click the branch point',
   'topo.clearRoute': 'Clear',
+  'topo.routes': 'Routes',
+  'topo.clearThisRoute': 'Clear this route',
   'topo.history': 'History',
   'topo.noHistory': 'Not marked yet',
   'topo.current': 'current',

@@ -658,6 +658,8 @@ export const ja: Messages = {
   'topo.fork': '他のルートから分岐',
   'topo.forkPick': '分岐する点をクリック',
   'topo.clearRoute': 'クリア',
+  'topo.routes': 'ルート',
+  'topo.clearThisRoute': 'このルートを消去',
   'topo.history': '変更履歴',
   'topo.noHistory': 'まだ記入がありません',
   'topo.current': '現在の版',

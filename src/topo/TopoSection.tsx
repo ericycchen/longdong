@@ -3,7 +3,7 @@ import type { Sector } from '../data/schema'
 import { localName, useLang } from '../i18n'
 import { useWide } from '../layout'
 import { useLongPress } from '../edit/useLongPress'
-import { href, navigate, useRouteLink } from '../router'
+import { useRouteLink } from '../router'
 import { fillShared } from './lines'
 import { useSectorTopos, type SectorTopo } from './store'
 import { BoltToggle, useShowBolts } from './BoltToggle'
@@ -71,9 +71,9 @@ export function SectorTopos({ sector }: { sector: Sector }) {
 
 /**
  * 路線頁：有標記這條路線的 Topo（直接放在卡片裡，沒有標題），這條用亮色並標出 bolt。
- * 手機版（editable）：點照片開全螢幕，長按進入這張照片的編輯；沒有 Topo 時整段不顯示。
+ * 手機版（onEdit）：點照片開全螢幕，長按在這一頁編輯這張照片；沒有 Topo 時整段不顯示。
  */
-export function RouteTopos({ sector, routeId, editable }: { sector: Sector; routeId: string; editable?: boolean }) {
+export function RouteTopos({ sector, routeId, onEdit }: { sector: Sector; routeId: string; onEdit?: (photo: string) => void }) {
   const { lang, t } = useLang()
   const topos = useSectorTopos(sector.id)?.filter((x) => x.latest?.marks[routeId])
   const [showBolts] = useShowBolts()
@@ -83,7 +83,7 @@ export function RouteTopos({ sector, routeId, editable }: { sector: Sector; rout
   return (
     <section className="route-block topos" aria-label={t('topo.title')}>
       {topos.map((topo) => (
-        <EditableFigure key={topo.photo.id} to={editable ? href.topo(topo.photo.id) : undefined}>
+        <EditableFigure key={topo.photo.id} onEdit={onEdit && (() => onEdit(topo.photo.id))}>
           <Photo
             topo={topo}
             alt={t('topo.alt', { name: localName(sector.name, lang).main })}
@@ -98,11 +98,11 @@ export function RouteTopos({ sector, routeId, editable }: { sector: Sector; rout
   )
 }
 
-/** 一張 Topo；to 有值時長按進入編輯 */
-function EditableFigure({ to, children }: { to?: string; children: ReactNode }) {
-  const press = useLongPress(() => to && navigate(to))
+/** 一張 Topo；onEdit 有值時長按進入編輯 */
+function EditableFigure({ onEdit, children }: { onEdit?: () => void; children: ReactNode }) {
+  const press = useLongPress(() => onEdit?.())
   return (
-    <figure className="topo" {...(to ? press : {})}>
+    <figure className="topo" {...(onEdit ? press : {})}>
       {children}
     </figure>
   )

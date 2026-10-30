@@ -3,8 +3,11 @@ import { useLang } from '../i18n'
 import { href, navigate } from '../router'
 import { uploadTopo } from './actions'
 
-/** 選照片上傳到分區，成功後進入那張照片的編輯；pick 開檔案選擇、input 要放進畫面（隱藏的 file input） */
-export function useTopoUpload(sector: string): { pick: () => void; input: ReactNode; busy: boolean; error?: string } {
+/**
+ * 選照片上傳到分區，成功後進入那張照片的編輯（onUploaded：在這個畫面接著編輯，不換頁）；
+ * pick 開檔案選擇、input 要放進畫面（隱藏的 file input）
+ */
+export function useTopoUpload(sector: string, onUploaded: (photo: string) => void = (photo) => navigate(href.topo(photo))): { pick: () => void; input: ReactNode; busy: boolean; error?: string } {
   const { t } = useLang()
   const ref = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
@@ -14,7 +17,7 @@ export function useTopoUpload(sector: string): { pick: () => void; input: ReactN
     setBusy(true)
     setError(undefined)
     try {
-      navigate(href.topo(await uploadTopo(sector, file)))
+      onUploaded(await uploadTopo(sector, file))
     } catch (err) {
       setError(t('topo.uploadError', { error: (err as Error).message }))
     } finally {
@@ -30,9 +33,9 @@ export function useTopoUpload(sector: string): { pick: () => void; input: ReactN
   }
 }
 
-export function UploadButton({ sector, className = 'action' }: { sector: string; className?: string }) {
+export function UploadButton({ sector, className = 'action', onUploaded }: { sector: string; className?: string; onUploaded?: (photo: string) => void }) {
   const { t } = useLang()
-  const { pick, input, busy, error } = useTopoUpload(sector)
+  const { pick, input, busy, error } = useTopoUpload(sector, onUploaded)
   return (
     <div className="topo-upload">
       {input}

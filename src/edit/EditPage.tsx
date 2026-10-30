@@ -23,7 +23,8 @@ import { LatestEdits } from './LatestEdits'
 import { ProgressStats } from './ProgressStats'
 import { DockHead, DockRail, PanelLayoutContext, type DockPart } from './PanelLayout'
 import { groupVersions } from './versions'
-import { currentText, loadTextEdits, textTarget, useTextEdits, type TextTarget, type TextVersion } from './textEdits'
+import { loadTextEdits, textTarget, type TextTarget, type TextVersion } from './textEdits'
+import { TEXT_MAX, useTextEditor } from './useTextEditor'
 import { applyDrafts, changedTargets, discardDrafts, canSubmitDraft, submitDrafts, useDrafts } from './mapDrafts'
 import { useMapItem } from './useMapItem'
 import './edit.css'
@@ -524,36 +525,24 @@ function PendingList({
   )
 }
 
-const TEXT_MAX = 3000
-
 /** 說明項目：文字框（目前顯示的說明）、TOCC 原文、提交；右側面板是修改紀錄 */
 function TextItemView({ item, data, onToast, onDirty }: ItemProps) {
   const { t } = useLang()
   const cloud = useCloud()
-  const versions = useTextEdits()
   const target = item.id as TextTarget
   const route = target.startsWith('route:') ? data.routes.find((r) => textTarget.route(r.route.id) === target)?.route : undefined
   const original = route?.description ?? ''
-  const shown = currentText(versions[target])?.text ?? original
-  const [text, setText] = useState(shown)
-  const [saving, setSaving] = useState(false)
-  const dirty = text !== shown
+  const { text, setText, dirty, saving, submit: save, versions } = useTextEditor(target, original)
   useEffect(() => onDirty(dirty), [dirty])
   const signedIn = cloud.status === 'signed-in'
   const canSubmit = dirty && !saving && signedIn
 
   const submit = async () => {
-    setSaving(true)
     try {
-      const { m, uid } = await withCloud()
-      // 和原文相同時存空字串（表示改回原文）
-      await m.addTextEdit(uid, target, text.trim() === original.trim() ? '' : text.trim())
-      await loadTextEdits(true)
+      await save()
       onToast(t('shape.saved'))
     } catch (err) {
       onToast(t('shape.saveFailed', { error: (err as Error).message }))
-    } finally {
-      setSaving(false)
     }
   }
   const deleteVersion = async (version: string) => {
@@ -566,11 +555,6 @@ function TextItemView({ item, data, onToast, onDirty }: ItemProps) {
       onToast(t('shape.saveFailed', { error: (err as Error).message }))
     }
   }
-  // 版本變了（提交、刪除）而且沒有修改中時，文字框跟著換
-  useEffect(() => {
-    if (!dirty) setText(shown)
-  }, [shown])
-
   return (
     <>
       <section className="edit-center edit-text">
@@ -620,7 +604,7 @@ function TextItemView({ item, data, onToast, onDirty }: ItemProps) {
           </p>
         )}
         <NeedSignIn />
-        <VersionList versions={versions[target] ?? []} empty={t('text.noVersions')} onDelete={(v) => void deleteVersion(v)} />
+        <VersionList versions={versions} empty={t('text.noVersions')} onDelete={(v) => void deleteVersion(v)} />
         <EditKeys rows={[{ keys: 'Ctrl / ⌘ Enter', label: t('shape.save') }]} />
       </aside>
     </>
@@ -667,7 +651,7 @@ function TopoItemView({ item, data }: { item: EditItem; data: LoadedData }) {
   return (
     <>
       <section className="edit-center edit-topo">
-        <TopoEditor data={data} id={item.id} embedded side={side} />
+        <TopoEditor data={data} id={item.id} embedded side={side} onClose={() => navigate(href.edit())} />
       </section>
       <aside className="edit-panel">
         <DockHead part="panel" title={t('edit.panel')} />

@@ -5387,6 +5387,36 @@ button.key-row:disabled {
   user-select: none;
 }
 
+/* 卡片裡的說明編輯（手機路線頁）：文字框接在原本說明的位置，下面一排是帶入原文、取消、提交 */
+.inline-text-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inline-text-area {
+  width: 100%;
+  min-height: 180px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.7;
+  resize: vertical;
+}
+
+.inline-text-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inline-text-spacer {
+  flex: 1;
+}
+
 /* 分區頁的標題卡在電腦版只佔清單那一欄：和手機版一樣名稱在左、地圖在右 */
 [data-layout='wide'] .area-hero.compact {
   grid-template-columns: minmax(0, 1fr) 42%;
@@ -5402,35 +5432,9 @@ button.key-row:disabled {
   height: 140px;
 }
 
-/* 工具列的工具那一排：電腦版與其他按鈕同一列；手機版單獨一排，左右滑動（不佔三四排的高度） */
+/* 工具列的工具那一排：和其他按鈕同一列（手機版是另一個版面，見 .topo-phone） */
 .topo-tools-row {
   display: contents;
-}
-
-.edit-app.narrow.focus .topo-edit-toolbar {
-  position: sticky;
-  top: 48px;
-  z-index: 4;
-  gap: 4px 8px;
-  min-height: 0;
-  padding: 4px 8px;
-}
-
-.edit-app.narrow.focus .topo-tools-row {
-  display: flex;
-  flex: 1 1 100%;
-  align-items: center;
-  gap: 4px 12px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.edit-app.narrow.focus .topo-tools-row > * {
-  flex: none;
-}
-
-.edit-app.narrow.focus .topo-edit-photo {
-  padding: 4px;
 }
 
 /* 區域、分區、路線頁標題卡的地圖：佔滿卡片右邊的高度，區域的形狀可以跨到卡片的上下緣；左邊淡出，和名稱自然接在一起 */
@@ -5644,3 +5648,204 @@ html {
   font-variant-numeric: tabular-nums;
 }
 
+
+/* ---------- Topo 編輯：手機版（整個畫面，src/topo/TopoEditor.tsx 的 PhoneShell） ---------- */
+
+/* 上面：關閉、目前路線（‹ ›、點名稱選路線）、提交；中間照片；下面拇指按得到的工具 */
+dialog.topo-phone {
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: #000;
+  color: var(--text);
+  flex-direction: column;
+}
+
+dialog.topo-phone[open] {
+  display: flex;
+}
+
+dialog.topo-phone::backdrop {
+  background: #000;
+}
+
+.topo-phone-top {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: calc(6px + env(safe-area-inset-top)) 8px 6px;
+  background: var(--surface);
+}
+
+.topo-phone-top .edit-btn.primary {
+  min-height: 40px;
+}
+
+.topo-phone-close {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.topo-phone-route {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.topo-phone-route-name {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  line-height: 44px;
+  cursor: pointer;
+}
+
+.topo-phone-route-name span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topo-phone .topo-tool {
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.topo-phone-status {
+  margin: 0;
+  padding: 6px 12px;
+  background: var(--surface);
+  font-size: 0.85rem;
+}
+
+.topo-phone .topo-edit-photo {
+  --topo-chrome: 200px;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  padding: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+.topo-phone .topo-edit-photo .topo-zoom {
+  border-radius: 0;
+}
+
+.topo-phone-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+  background: var(--surface);
+}
+
+.topo-phone-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 48px;
+}
+
+.topo-phone-modes {
+  display: flex;
+  padding: 2px;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.topo-phone-modes .topo-tool {
+  padding: 0 16px;
+}
+
+/* bolt 位置：一排，左右滑動 */
+.topo-phone .topo-positions {
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.topo-phone .topo-positions .chip {
+  flex: none;
+  min-height: 36px;
+}
+
+.topo-phone-note {
+  flex: 1;
+  font-size: 0.9rem;
+}
+
+.topo-phone-message {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg);
+}
+
+/* 從下方滑出的面板：路線清單、更多（分岔、裁切、清除、捨棄、修改記錄） */
+.topo-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.topo-sheet {
+  width: 100%;
+  max-height: 70dvh;
+  overflow-y: auto;
+  padding: 8px 12px calc(12px + env(safe-area-inset-bottom));
+  border-radius: 16px 16px 0 0;
+  background: var(--surface);
+}
+
+.topo-sheet-menu {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 8px;
+}
+
+.topo-sheet-menu button {
+  min-height: 48px;
+  padding: 0 4px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.topo-sheet-menu button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
