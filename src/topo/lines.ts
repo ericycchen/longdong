@@ -12,21 +12,41 @@ const segmentKey = (a: Point, b: Point) => (a[0] < b[0] || (a[0] === b[0] && a[1
  */
 export function drawnRuns(lines: [id: string, line: Point[]][]): Map<string, Point[][]> {
   const seen = new Set<string>()
-  const runs = new Map<string, Point[][]>()
-  for (const [id, line] of lines) {
-    const own: Point[][] = []
-    let run: Point[] | undefined
-    for (let i = 0; i < line.length - 1; i++) {
-      const key = segmentKey(line[i], line[i + 1])
-      if (seen.has(key)) {
-        run = undefined
-        continue
-      }
-      seen.add(key)
-      if (!run) own.push((run = [line[i]]))
-      run.push(line[i + 1])
+  return new Map(
+    lines.map(([id, line]) => [
+      id,
+      runsOf(line, (key) => {
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      }),
+    ]),
+  )
+}
+
+/**
+ * 每條路線獨有的折線：不和任何一條路線共用的線段。分岔的路線編號標在這裡（各自的岔線上），
+ * 不標在共用的前段，否則看不出哪個編號是哪條岔線。
+ */
+export function ownRuns(lines: [id: string, line: Point[]][]): Map<string, Point[][]> {
+  const uses = new Map<string, number>()
+  for (const [, line] of lines) {
+    for (const key of new Set(line.slice(1).map((p, i) => segmentKey(line[i], p)))) uses.set(key, (uses.get(key) ?? 0) + 1)
+  }
+  return new Map(lines.map(([id, line]) => [id, runsOf(line, (key) => uses.get(key) === 1)]))
+}
+
+/** keep 為真的連續線段接成折線 */
+function runsOf(line: Point[], keep: (key: string) => boolean): Point[][] {
+  const runs: Point[][] = []
+  let run: Point[] | undefined
+  for (let i = 0; i < line.length - 1; i++) {
+    if (!keep(segmentKey(line[i], line[i + 1]))) {
+      run = undefined
+      continue
     }
-    runs.set(id, own)
+    if (!run) runs.push((run = [line[i]]))
+    run.push(line[i + 1])
   }
   return runs
 }

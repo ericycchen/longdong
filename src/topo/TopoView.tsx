@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState, type ReactNode, type SVGProps } from
 import { navigate } from '../router'
 import type { Route } from '../data/schema'
 import { centeredBox, pathLength, Placer, pointAlong, smoothPath, textWidth, type Box, type Pt } from './annotate'
-import { drawnRuns } from './lines'
+import { drawnRuns, ownRuns } from './lines'
 import { FULL_CROP, imageUrl, SCALE, type Crop, type Marks, type Point, type TopoPhoto } from './model'
 
 /**
@@ -158,8 +158,12 @@ export function TopoLines({
   const ids = Object.keys(marks).sort((a, b) => Number(a === highlight) - Number(b === highlight))
   // 先放的優先：選到的路線，其次依編號
   const priority = [...ids].sort((a, b) => Number(b === highlight) - Number(a === highlight) || Number(labels.get(a)) - Number(labels.get(b)) || a.localeCompare(b))
-  const runs = drawnRuns(priority.filter((id) => marks[id].line).map((id) => [id, marks[id].line!.map((p) => px(photo, p))]))
+  const drawn = priority.filter((id) => marks[id].line).map((id): [string, Pt[]] => [id, marks[id].line!.map((p) => px(photo, p))])
+  const runs = drawnRuns(drawn)
+  const own = ownRuns(drawn)
   const lineOf = (id: string): Pt[] | undefined => marks[id].line?.map((p) => px(photo, p) as Pt)
+  /** 編號牌放的線：獨有線段中最長的一段（分岔的路線標在自己的岔線上）；整條都和別的路線共用時用整條 */
+  const labelLine = (id: string, line: Pt[]): Pt[] => own.get(id)!.reduce<Pt[] | undefined>((a, b) => (!a || pathLength(b) > pathLength(a) ? b : a), undefined) ?? line
 
   // ── 自動排版：依優先順序放牌子，放不下的藏起來 ──
   const placer = new Placer({ x: bx, y: by, w: bw, h: bh }, 3 * k)
@@ -175,7 +179,8 @@ export function TopoLines({
     let spots: Box[]
     if (line && line.length >= 2) {
       if (id !== highlight && length.get(id)! < MIN_LABEL_LINE_PX) continue
-      spots = LABEL_SPOTS.map((f) => centeredBox(pointAlong(line, f), w, h))
+      const on = labelLine(id, line)
+      spots = LABEL_SPOTS.map((f) => centeredBox(pointAlong(on, f), w, h))
     } else {
       // 沒有線段：標在最下面的 bolt 旁邊
       const low = lowestBolt(photo, marks[id].bolts)
@@ -231,15 +236,19 @@ export function TopoLines({
     }
   }
 
+  // SVG 的 <a> 的 href 不是字串，站內換頁攔不到（router.ts），改用點擊與 Enter 換頁
+  const pick = onPick ?? (link && ((id: string) => navigate(link(id))))
+  // 沒有路線資料（kind 不明）時用紅色
+  const clsOf = (id: string) => `topo-route kind-${info?.get(id)?.kind ?? 'other'}${id === highlight ? ' on' : highlight ? ' dim' : ''}`
+
+  // 先畫所有路線的線，再畫所有的牌子：編號、bolt 不會被別條路線的線蓋住
   return (
     <>
       {ids.map((id) => {
         const line = lineOf(id)
         const start = line?.[0]
-        const p = plan.get(id)!
         const on = id === highlight
-        // 沒有路線資料（kind 不明）時用紅色
-        const cls = `topo-route kind-${info?.get(id)?.kind ?? 'other'}${on ? ' on' : highlight ? ' dim' : ''}`
+        const cls = clsOf(id)
         const body = (
           <>
             {(runs.get(id) ?? []).map((run, i) => {
@@ -253,6 +262,32 @@ export function TopoLines({
               )
             })}
             {start && <circle className="topo-start" cx={start[0]} cy={start[1]} r={(on ? 5.5 : 4.5) * k} strokeWidth={1.5 * k} />}
+          </>
+        )
+        return pick ? (
+          <g
+            key={id}
+            className={`${cls} link`}
+            role={onPick ? 'button' : 'link'}
+            tabIndex={0}
+            aria-label={labels.get(id) ?? id}
+            onClick={() => pick(id)}
+            onKeyDown={(e) => e.key === 'Enter' && pick(id)}
+          >
+            {body}
+          </g>
+        ) : (
+          <g key={id} className={cls}>
+            {body}
+          </g>
+        )
+      })}
+      {ids.map((id) => {
+        const p = plan.get(id)!
+        if (!p.pill && !p.note && p.bolts.length === 0) return null
+        return (
+          // 鍵盤操作由上面線的那一層負責，這裡只接滑鼠點擊
+          <g key={`${id}-labels`} className={`${clsOf(id)}${pick ? ' link' : ''}`} onClick={pick && (() => pick(id))}>
             {p.bolts.map((b) => (
               <g key={b.pos} className={`topo-bolt${b.anchor ? ' anchor' : ''}`}>
                 <rect x={b.pill.x} y={b.pill.y} width={b.pill.w} height={b.pill.h} rx={b.pill.h / 2} />
@@ -283,25 +318,6 @@ export function TopoLines({
                 ))}
               </text>
             )}
-          </>
-        )
-        // SVG 的 <a> 的 href 不是字串，站內換頁攔不到（router.ts），改用點擊與 Enter 換頁
-        const pick = onPick ?? (link && ((id: string) => navigate(link(id))))
-        return pick ? (
-          <g
-            key={id}
-            className={`${cls} link`}
-            role={onPick ? 'button' : 'link'}
-            tabIndex={0}
-            aria-label={labels.get(id) ?? id}
-            onClick={() => pick(id)}
-            onKeyDown={(e) => e.key === 'Enter' && pick(id)}
-          >
-            {body}
-          </g>
-        ) : (
-          <g key={id} className={cls}>
-            {body}
           </g>
         )
       })}

@@ -44,6 +44,25 @@ describe('Topo 標記的自動排版（畫面上的大小）', () => {
     expect(html).toContain('× B01')
   })
 
+  it('分岔的路線：編號各自標在自己的岔線上，不標在共用的前段', () => {
+    // 共用的前段比岔線長：整條線的正中間落在前段（x = 1000 像素）
+    const fork: Marks = {
+      a: { line: [[5000, 9500], [5000, 3000], [4000, 1000]] },
+      b: { line: [[5000, 9500], [5000, 3000], [6000, 1000]] },
+    }
+    const html = renderToStaticMarkup(createElement('svg', null, createElement(TopoLines, { photo, marks: fork, labels, k: 1 })))
+    const centers = [...html.matchAll(/class="topo-badge"><rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)"/g)].map((m) => Number(m[1]) + Number(m[3]) / 2)
+    expect(centers).toHaveLength(2)
+    expect(centers[0]).toBeLessThan(1000)
+    expect(centers[1]).toBeGreaterThan(1000)
+  })
+
+  it('編號、bolt 畫在所有路線的線上面，不會被別條線蓋住', () => {
+    const html = render(1, { bolts: ['a'] })
+    expect(html.lastIndexOf('class="topo-line"')).toBeLessThan(html.indexOf('class="topo-badge"'))
+    expect(html.lastIndexOf('class="topo-line"')).toBeLessThan(html.indexOf('class="topo-bolt'))
+  })
+
   it('縮得很小，太短的路線不標編號；選到的路線仍然標', () => {
     expect(count(render(60), /class="topo-badge"/g)).toBe(0)
     expect(count(render(60, { highlight: 'a' }), /class="topo-badge"/g)).toBe(1)

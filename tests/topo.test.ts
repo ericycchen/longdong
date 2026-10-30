@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { Dataset, Route } from '../src/data/schema'
 import { routeKey } from '../src/social/model'
 import { clampView, fitSize, IDENTITY, MAX_SCALE, moveView } from '../src/topo/viewport'
-import { addLinePoint, drawnRuns, fillShared, forkLine, moveSharedPoint, segmentAt, syncShared } from '../src/topo/lines'
+import { addLinePoint, drawnRuns, fillShared, ownRuns, forkLine, moveSharedPoint, segmentAt, syncShared } from '../src/topo/lines'
 import { boltPositions, decodeEdit, encodeMarks, FULL_CROP, isFullCrop, MIN_CROP, moveCrop, resizeCrop, routeIdFromKey, sameCrop, sameMarks, toCropPoint, toPoint, type Marks, type Point } from '../src/topo/model'
 
 const rules = JSON.parse(readFileSync('firebase/database.rules.json', 'utf8')).rules.v2.topoEdits.$photo.$edit.routes.$route
@@ -144,6 +144,16 @@ describe('共用線段', () => {
   it('端點相同但方向相反的線段視為同一段；只差一點座標就不算共用', () => {
     expect(drawnRuns([['a', [[1, 1], [2, 2]]], ['b', [[2, 2], [1, 1]]]]).get('b')).toEqual([])
     expect(drawnRuns([['a', [[1, 1], [2, 2]]], ['b', [[1, 1], [2, 3]]]]).get('b')).toEqual([[[1, 1], [2, 3]]])
+  })
+
+  it('ownRuns：只留不和任何路線共用的線段，與順序無關', () => {
+    const trunk: Point[] = [[5000, 9000], [5000, 5000], [4000, 1000]]
+    const branch: Point[] = [[5000, 9000], [5000, 5000], [6000, 1000]]
+    const own = ownRuns([['a', trunk], ['b', branch]])
+    expect(own.get('a')).toEqual([[[5000, 5000], [4000, 1000]]])
+    expect(own.get('b')).toEqual([[[5000, 5000], [6000, 1000]]])
+    // 整條都共用：沒有獨有的線段
+    expect(ownRuns([['a', trunk], ['b', [...trunk].reverse()]]).get('a')).toEqual([])
   })
 
   it('被共用段隔開的兩段各自成一條折線', () => {
