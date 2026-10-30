@@ -54,6 +54,7 @@ let ok = true
 const check = (label: string, pass: boolean, detail = '') => {
   console.log(`${pass ? '✓' : '✗'} ${label}${detail ? '：' + detail : ''}`)
   if (!pass) ok = false
+  if (!pass && process.env.GITHUB_ACTIONS) console.log(`::error::${label} ${detail}`.slice(0, 900).replace(/\n/g, ' '))
 }
 /** 等到條件成立（最多 15 秒）；資料庫、畫面都是非同步的 */
 async function until<T>(fn: () => Promise<T | undefined | false | null> | T | undefined | false | null, ms = 15000): Promise<T | undefined> {
@@ -1127,6 +1128,7 @@ try {
   const unexpected = logs.filter((l) => !/Failed to load resource|favicon|net::ERR/.test(l))
   if (unexpected.length) {
     console.log('主控台錯誤：\n  ' + unexpected.slice(0, 10).join('\n  '))
+    if (process.env.GITHUB_ACTIONS) console.log(`::error::主控台錯誤 ${unexpected.slice(0, 5).join(' | ')}`.slice(0, 900))
     ok = false
   }
   await browser.close()
