@@ -8,6 +8,7 @@ import { SafetyLight } from '../components/SafetyLight'
 import { TitleTools } from '../components/TitleTools'
 import type { LoadedData } from '../data/dataset'
 import type { Route } from '../data/schema'
+import { savedOverlay } from '../edit/backGuard'
 import { CommunityText } from '../edit/CommunityText'
 import type { ToolScope } from '../edit/PageTools'
 import { textTarget } from '../edit/textEdits'
@@ -47,7 +48,12 @@ export function RoutePage({ data, id, topoInList }: { data: LoadedData; id: stri
   const rating = summarize(useSocial().ratings[routeKey(id)])
   const [tickOpen, setTickOpen] = useState(false)
   const [reviews, setReviews] = useState<ReviewsSheet>()
-  const [editing, setEditing] = useState<Editing>()
+  // 手機就地編輯中重新載入、App 被系統關掉再回來：回到原來的編輯（記在瀏覽紀錄裡，useBackGuard）
+  const [editing, setEditing] = useState<Editing | undefined>(() => {
+    const saved = savedOverlay()
+    if (saved?.route !== id) return undefined
+    return saved.kind === 'topo' ? { kind: 'topo', photo: saved.photo } : { kind: 'text' }
+  })
   const wide = useWide()
   if (!ref) return <NotFound />
   const { route, sector, area } = ref
@@ -107,6 +113,7 @@ export function RoutePage({ data, id, topoInList }: { data: LoadedData; id: stri
         original={route.description}
         editing={editing?.kind === 'text'}
         onEdit={wide ? undefined : (on) => setEditing(on ? { kind: 'text' } : undefined)}
+        route={route.id}
       />
 
       {!wide && editing?.kind === 'topo' && (

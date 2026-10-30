@@ -44,6 +44,21 @@ describe('Topo 標記的自動排版（畫面上的大小）', () => {
     expect(html).toContain('× B01')
   })
 
+  it('編輯時：線比較細、沒有難度名稱等說明，編號不蓋在選到的路線的點上，bolt 照樣顯示', () => {
+    const k = 2
+    const html = render(k, { highlight: 'a', bolts: ['a'], editing: true })
+    expect(html).not.toContain('topo-note')
+    expect(count(html, /class="topo-bolt/g)).toBe(2)
+    const widths = [...html.matchAll(/class="topo-line" d="[^"]*" stroke-width="([\d.]+)"/g)].map((m) => Number(m[1]) / k)
+    expect(widths.length).toBeGreaterThan(0)
+    expect(Math.max(...widths)).toBeLessThanOrEqual(2)
+    const points = marks.a.line!.map(([x, y]) => [(x * photo.width) / 10000, (y * photo.height) / 10000])
+    for (const m of html.matchAll(/class="topo-badge"><rect x="([\d.-]+)" y="([\d.-]+)" width="([\d.]+)" height="([\d.]+)"/g)) {
+      const [x, y, w, h] = m.slice(1).map(Number)
+      for (const [px, py] of points) expect(px > x - 12 * k && px < x + w + 12 * k && py > y - 12 * k && py < y + h + 12 * k).toBe(false)
+    }
+  })
+
   it('分岔的路線：編號各自標在自己的岔線上，不標在共用的前段', () => {
     // 共用的前段比岔線長：整條線的正中間落在前段（x = 1000 像素）
     const fork: Marks = {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useIsAdmin } from '../admin'
 import { GradePill } from '../components/GradePill'
@@ -13,22 +13,24 @@ import { useCloud } from '../personal/sync'
 import { href, navigate } from '../router'
 import { displayName, useSocial } from '../social/store'
 import { removeEdit, removeTopo, submitEdit } from './actions'
+import { smoothPath, type Pt } from './annotate'
 import { CropBox } from './CropBox'
 import { addLinePoint, fillShared, forkLine, moveSharedPoint, syncShared } from './lines'
-import { boltPositions, FULL_CROP, isFullCrop, SCALE, sameCrop, sameMarks, toCropPoint, type Crop, type Marks, type Point, type RouteMarks, type TopoEdit, type TopoPhoto } from './model'
+import { boltPositions, FULL_CROP, imageUrl, isFullCrop, SCALE, sameCrop, sameMarks, toCropPoint, type Crop, type Marks, type Point, type RouteMarks, type TopoEdit, type TopoPhoto } from './model'
+import { savedOverlay, useBackGuard, type EditOverlay } from '../edit/backGuard'
 import { HistorySection } from '../edit/HistorySection'
 import { EditKeys } from '../edit/KeyList'
 import { loadEdits, loadPhotos, useSectorTopos, useTopoState } from './store'
 import { routeLabels } from './TopoSection'
 import { px, routeInfo, TopoFrame, TopoLines } from './TopoView'
 import { UploadButton } from './TopoUpload'
-import { ZoomPane } from './ZoomPane'
+import { DRAG_PX, ZoomPane, type ZoomFocus } from './ZoomPane'
 import '../edit/edit.css'
 
 /**
  * Topo 編輯（電腦、手機）：照片上標記線段（由起攀點往上）與 bolt，另外選路線；手機的單指、雙指手勢在 ZoomPane。
  * 修改先存在這台裝置的草稿，按「提交」才上傳成新的版本；所有版本都保留，可以預覽、從舊版本繼續修改。
- * 手機版（窄螢幕）是整個畫面的編輯器（PhoneShell）：上面關閉、目前路線、提交，下面是拇指按得到的工具；onClose 回到原來的畫面。
+ * 手機版（窄螢幕）是整個畫面的編輯器（PhoneShell）：照片盡量大，關閉、提交、工具都浮在照片上，下面是路線清單；onClose 回到原來的畫面。
  * initial：一開始選的路線（從路線頁進來時是那條路線）。
  */
 export function TopoEditor({
@@ -61,9 +63,9 @@ export function TopoEditor({
   const signedIn = cloud.status === 'signed-in'
   if (phone && !(edits && found && signedIn))
     return (
-      <PhoneShell onClose={onClose}>
+      <PhoneShell onClose={onClose} overlay={{ kind: 'topo', route: initial, photo: id }}>
         <header className="topo-phone-top">
-          <CloseButton onClose={onClose} />
+          <CloseButton />
         </header>
         <div className="topo-phone-message">
           {!state.photos || !edits ? <p className="muted">{t('app.loading')}</p> : !found ? <NotFound /> : cloud.status !== 'loading' && <SignInPrompt />}
@@ -116,9 +118,9 @@ export function RouteTopoEditor({ data, sector, routeId, photo, onClose }: { dat
   const id = photo ?? uploaded ?? (topos?.find((x) => x.latest?.marks[routeId]) ?? topos?.[0])?.photo.id
   if (id) return <TopoEditor data={data} id={id} side={null} initial={routeId} onClose={onClose} />
   return (
-    <PhoneShell onClose={onClose}>
+    <PhoneShell onClose={onClose} overlay={{ kind: 'topo', route: routeId }}>
       <header className="topo-phone-top">
-        <CloseButton onClose={onClose} />
+        <CloseButton />
       </header>
       <div className="topo-phone-message">
         {!topos || cloud.status === 'loading' ? (
@@ -133,11 +135,29 @@ export function RouteTopoEditor({ data, sector, routeId, photo, onClose }: { dat
   )
 }
 
+/** PhoneShell 的關閉（退掉返回手勢用的那一筆瀏覽紀錄再關閉），給關閉按鈕用 */
+const ShellClose = createContext<() => void>(() => {})
+
 /**
- * 手機版的編輯畫面：蓋住整個頁面（dialog），返回鍵（Esc）關閉；
+ * 手機版的編輯畫面：蓋住整個頁面（dialog）。
+ * 返回手勢（Android 返回鍵、iOS 從左緣滑回、Esc）先交給 onBack（關面板、結束畫線…），沒有要處理的才關閉（useBackGuard）；
+ * 打開的狀態記在瀏覽紀錄裡（overlay），App 被系統關掉、重新載入後回到原來的編輯；修改本身一直存在這台裝置的草稿。
  * 觸控不往外傳：App 的左右滑動換頁（swipe.ts）掛在外層，編輯時的拖曳、縮放不能換頁。
  */
-function PhoneShell({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+function PhoneShell({
+  onClose,
+  onBack = () => false,
+  overlay,
+  label,
+  children,
+}: {
+  onClose: () => void
+  onBack?: () => boolean
+  overlay: EditOverlay
+  label?: string
+  children: ReactNode
+}) {
+  const close = useBackGuard(overlay, onBack, onClose)
   const ref = useRef<HTMLDialogElement>(null)
   useEffect(() => {
     const el = ref.current!
@@ -153,20 +173,23 @@ function PhoneShell({ onClose, children }: { onClose: () => void; children: Reac
     <dialog
       ref={ref}
       className="topo-phone"
+      aria-label={label}
       onCancel={(e) => {
+        // Android 的返回鍵在 dialog 打開時是 cancel（不是上一頁）：和返回手勢一樣處理
         e.preventDefault()
-        onClose()
+        if (!onBack()) close()
       }}
     >
-      {children}
+      <ShellClose.Provider value={close}>{children}</ShellClose.Provider>
     </dialog>
   )
 }
 
-function CloseButton({ onClose }: { onClose: () => void }) {
+function CloseButton() {
   const { t } = useLang()
+  const close = useContext(ShellClose)
   return (
-    <button type="button" className="topo-phone-close" aria-label={t('layout.close')} onClick={onClose}>
+    <button type="button" className="topo-phone-close" aria-label={t('layout.close')} onClick={close}>
       <Icon d="M6 6l12 12M18 6 6 18" />
     </button>
   )
@@ -194,13 +217,61 @@ function PaneSplit({ onResize }: { onResize: (height: number) => void }) {
   )
 }
 
-/** 從下方滑出的面板（路線清單、更多）：點外面關閉 */
+/** 從下方滑出的面板（更多）：點外面關閉；也是 dialog，返回手勢、Esc 先關這個，不會關掉整個編輯器 */
 function Sheet({ label, onClose, children }: { label: string; onClose: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLDialogElement>(null)
+  useEffect(() => ref.current!.showModal(), [])
   return (
-    <div className="topo-sheet-backdrop" onClick={onClose}>
-      <div className="topo-sheet" role="dialog" aria-label={label} onClick={(e) => e.stopPropagation()}>
-        {children}
-      </div>
+    <dialog
+      ref={ref}
+      className="topo-sheet-backdrop"
+      aria-label={label}
+      onCancel={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        onClose()
+      }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="topo-sheet">{children}</div>
+    </dialog>
+  )
+}
+
+/** 放大鏡的大小（螢幕像素）與倍率（比照片目前在畫面上放大幾倍） */
+const LOUPE_PX = 128
+const LOUPE_ZOOM = 2.5
+
+/** 放大鏡：at 是中心（萬分比），span 是看得到的寬度（照片像素）；right 時放在右上（手指在左半邊） */
+interface LoupeState {
+  at: Point
+  span: number
+  right: boolean
+}
+
+/**
+ * 放大鏡：手指按住瞄準、拖曳點時，手指底下那一塊放大顯示在照片上方的角落（不被手指擋住），
+ * 十字中心就是點會放的位置；也畫出這條路線目前的線與點。
+ */
+function Loupe({ photo, loupe, line }: { photo: TopoPhoto; loupe: LoupeState; line?: Point[] }) {
+  const [cx, cy] = px(photo, loupe.at)
+  const span = loupe.span
+  const k = span / LOUPE_PX
+  const pts = (line ?? []).map((p) => px(photo, p) as Pt)
+  return (
+    <div className={`topo-loupe${loupe.right ? ' right' : ''}`} aria-hidden>
+      <svg viewBox={`${cx - span / 2} ${cy - span / 2} ${span} ${span}`} width={LOUPE_PX} height={LOUPE_PX}>
+        <image href={imageUrl(photo.image)} x={0} y={0} width={photo.width} height={photo.height} />
+        {pts.length >= 2 && <path className="topo-loupe-line" d={smoothPath(pts)} strokeWidth={2 * k} />}
+        {pts.map(([x, y], i) => (
+          <circle key={i} className="topo-loupe-point" cx={x} cy={y} r={6 * k} strokeWidth={1.5 * k} />
+        ))}
+        <path
+          className="topo-loupe-cross"
+          d={`M${cx - 14 * k} ${cy}h${10 * k}M${cx + 4 * k} ${cy}h${10 * k}M${cx} ${cy - 14 * k}v${10 * k}M${cx} ${cy + 4 * k}v${10 * k}`}
+          strokeWidth={1.5 * k}
+        />
+      </svg>
     </div>
   )
 }
@@ -213,6 +284,9 @@ function Icon({ d }: { d: string }) {
     </svg>
   )
 }
+
+/** 手機版：手指按住不動這麼久（毫秒）出現放大鏡，滑動對準、放開才放點 */
+const AIM_MS = 250
 
 /** select（手機版）：點照片不加點，點線選路線；line：畫線，每點一下加一個點；bolt：放 bolt；crop：裁切 */
 type Mode = 'select' | 'line' | 'bolt' | 'crop'
@@ -285,7 +359,8 @@ function Editor({
   const latest = edits.at(-1)
   const [draft, setDraftState] = useState<Draft | undefined>(() => readDraft(photo.id))
   const [preview, setPreview] = useState<TopoEdit>()
-  const [selected, setSelected] = useState<string | undefined>(initial ?? routes.find((r) => r.number)?.id)
+  // 手機版重新載入、App 被系統關掉再回來：回到原來選的路線（記在瀏覽紀錄裡）
+  const [selected, setSelected] = useState<string | undefined>(() => (onClose && savedOverlay()?.selected) || initial || routes.find((r) => r.number)?.id)
   // 手機版從選路線開始，按「畫線」才標點；電腦版一開始就能畫
   const [mode, setMode] = useState<Mode>(onClose ? 'select' : 'line')
   const [boltPos, setBoltPos] = useState<string>()
@@ -299,6 +374,10 @@ function Editor({
   const [sheet, setSheet] = useState<'more'>()
   /** 手機版：下面路線清單的高度（拖曳分隔線調整；undefined 是預設） */
   const [listHeight, setListHeight] = useState<number>()
+  /** 手機版：放大鏡（按住瞄準、拖曳點時） */
+  const [loupe, setLoupe] = useState<LoupeState>()
+  /** 手機版：自動縮放到的地方（選路線、選點、繼續畫、完成） */
+  const [focus, setFocus] = useState<ZoomFocus>()
   // 全畫面：只放大編輯區（工具列與照片），用瀏覽器的全螢幕
   const layoutRef = useRef<HTMLDivElement>(null)
   const [full, setFull] = useState(false)
@@ -376,6 +455,40 @@ function Editor({
     setForking(false)
     setPicked(undefined)
   }
+  /** 手機版自動縮放到照片上的一塊（萬分比）：換算成畫面上（裁切後）的比例 */
+  const zoomTo = (box: { x: number; y: number; w: number; h: number }, keepZoom = false) => {
+    if (!onClose) return
+    const c = crop ?? FULL_CROP
+    setFocus((f) => ({ x: (box.x - c.x) / c.w, y: (box.y - c.y) / c.h, w: box.w / c.w, h: box.h / c.h, seq: (f?.seq ?? 0) + 1, keepZoom }))
+  }
+  /** 一條路線的線與 bolt 所在的範圍（留一點邊）；還沒標記時是整張 */
+  const zoomToRoute = (id: string | undefined) => {
+    const m = id ? marks[id] : undefined
+    const pts = [...(m?.line ?? []), ...Object.values(m?.bolts ?? {})]
+    const c = crop ?? FULL_CROP
+    if (pts.length === 0) return zoomTo(c)
+    const xs = pts.map(([x]) => x)
+    const ys = pts.map(([, y]) => y)
+    const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)]
+    const w = Math.max(x1 - x0, c.w * 0.2) * 1.4
+    const h = Math.max(y1 - y0, c.h * 0.2) * 1.3
+    zoomTo({ x: (x0 + x1) / 2 - w / 2, y: (y0 + y1) / 2 - h / 2, w, h })
+  }
+  /** 放大到一個點附近（選點、繼續畫）：大約是整張的三分之一 */
+  const zoomToPoint = ([x, y]: Point) => {
+    const c = crop ?? FULL_CROP
+    zoomTo({ x: x - c.w / 6, y: y - c.h / 6, w: c.w / 3, h: c.h / 3 }, true)
+  }
+  /** 從清單或照片上選路線：手機版接著縮放到那條路線 */
+  const choose = (id: string) => {
+    pick(id)
+    zoomToRoute(id)
+  }
+  // 手機版一打開就縮放到一開始選的路線（只在打開時）
+  useEffect(() => {
+    if (onClose && initial) zoomToRoute(initial)
+  }, [])
+
   /** 修改選取的路線；第一次修改時以最新版本為基礎建立草稿 */
   const edit = (change: (m: RouteMarks) => RouteMarks) => {
     if (!selected) return
@@ -462,18 +575,98 @@ function Editor({
     return best
   }
 
-  const onPhotoClick = (e: ReactMouseEvent<SVGSVGElement>) => {
-    if (preview || mode === 'crop' || isForking || !selected || dragging.current) return
-    const near = coarse && (mode === 'line' || mode === 'select') ? nearPoint(e, e.currentTarget) : -1
-    if (near >= 0) return setPicked({ kind: 'line', index: near, at: current.line![near] })
-    const p = pointAt(e, e.currentTarget)
-    setPicked(undefined)
-    if (mode === 'select') return
+  /** 在這個位置加一個點（畫線）或放目前位置的 bolt */
+  const placeAt = (p: Point) => {
+    if (!selected) return
     if (mode === 'line') editMarks((all) => addLinePoint(all, selected, p, photo.width / photo.height))
-    else if (placing) {
+    else if (mode === 'bolt' && placing) {
       edit((m) => ({ ...m, bolts: { ...m.bolts, [placing]: p } }))
       setBoltPos(undefined)
     }
+  }
+
+  const onPhotoClick = (e: ReactMouseEvent<SVGSVGElement>) => {
+    // 按住瞄準已經放了點：放開後的這次點擊不再加一個
+    if (aimed.current) return void (aimed.current = false)
+    if (preview || mode === 'crop' || isForking || !selected || dragging.current) return
+    const near = coarse && (mode === 'line' || mode === 'select') ? nearPoint(e, e.currentTarget) : -1
+    if (near >= 0) {
+      setPicked({ kind: 'line', index: near, at: current.line![near] })
+      // 選了點要調整：放大到點附近，方便拖曳
+      zoomToPoint(current.line![near])
+      return
+    }
+    const p = pointAt(e, e.currentTarget)
+    setPicked(undefined)
+    if (mode !== 'select') placeAt(p)
+  }
+
+  /** 放大鏡顯示在手指的位置 */
+  const showLoupe = (e: { clientX: number; clientY: number }, svg: SVGSVGElement) => {
+    const r = svg.getBoundingClientRect()
+    const c = crop ?? FULL_CROP
+    const area = svg.closest('.topo-phone-photo')?.getBoundingClientRect() ?? r
+    setLoupe({ at: pointAt(e, svg), span: (LOUPE_PX * px(photo, [c.w, 0])[0]) / r.width / LOUPE_ZOOM, right: e.clientX - area.left < area.width / 2 })
+  }
+
+  // 手機版按住瞄準：手指按住不動一下出現放大鏡，滑動對準，放開才放點（點一下照樣直接放）
+  const aim = useRef<{ id: number; x: number; y: number; timer: ReturnType<typeof setTimeout>; on: boolean } | null>(null)
+  /** 瞄準放了點：擋掉放開後的那次點擊；下一次按下時清掉 */
+  const aimed = useRef(false)
+  const fingers = useRef(new Set<number>())
+  const aimable = !!onClose && !preview && !isForking && !!selected && (mode === 'line' || (mode === 'bolt' && !!placing))
+  const svgIn = (el: Element) => el.querySelector<SVGSVGElement>('.topo-frame svg')
+  const stopAim = () => {
+    if (aim.current) clearTimeout(aim.current.timer)
+    aim.current = null
+    setLoupe(undefined)
+  }
+  const aimHandlers = {
+    onPointerDownCapture: (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (e.pointerType !== 'touch') return
+      if (e.isPrimary) fingers.current.clear()
+      fingers.current.add(e.pointerId)
+      aimed.current = false
+      // 第二根手指（捏合）、按在點或把手上（拖曳它們）：不瞄準
+      if (fingers.current.size > 1 || !aimable || (e.target as Element).closest('.topo-handles, .topo-hits, .topo-zoom-controls')) return stopAim()
+      const at = { clientX: e.clientX, clientY: e.clientY }
+      const box = e.currentTarget
+      const id = e.pointerId
+      aim.current = {
+        id,
+        x: e.clientX,
+        y: e.clientY,
+        on: false,
+        timer: setTimeout(() => {
+          const svg = svgIn(box)
+          if (!aim.current || aim.current.id !== id || !svg) return
+          aim.current.on = true
+          showLoupe(at, svg)
+        }, AIM_MS),
+      }
+    },
+    onPointerMove: (e: ReactPointerEvent<HTMLDivElement>) => {
+      const a = aim.current
+      if (!a || a.id !== e.pointerId) return
+      const svg = svgIn(e.currentTarget)
+      if (a.on && svg) showLoupe(e, svg)
+      else if (Math.hypot(e.clientX - a.x, e.clientY - a.y) > DRAG_PX) stopAim()
+    },
+    onPointerUp: (e: ReactPointerEvent<HTMLDivElement>) => {
+      fingers.current.delete(e.pointerId)
+      const a = aim.current
+      if (!a || a.id !== e.pointerId) return
+      const svg = svgIn(e.currentTarget)
+      if (a.on && svg) {
+        placeAt(pointAt(e, svg))
+        aimed.current = true
+      }
+      stopAim()
+    },
+    onPointerCancel: (e: ReactPointerEvent<HTMLDivElement>) => {
+      fingers.current.delete(e.pointerId)
+      stopAim()
+    },
   }
 
   // 拖曳線段的點或 bolt：按下時記一次復原點，移動時直接改草稿
@@ -485,12 +678,14 @@ function Editor({
     dragging.current = target
     setPicked(target)
     edit((m) => m)
+    if (onClose && e.pointerType === 'touch' && e.currentTarget.ownerSVGElement) showLoupe(e, e.currentTarget.ownerSVGElement)
   }
   const onDrag = (e: ReactPointerEvent<SVGElement>) => {
     const d = dragging.current
     const svg = e.currentTarget.ownerSVGElement
     if (!d || !svg || !selected) return
     const p = pointAt(e, svg)
+    if (loupe) showLoupe(e, svg)
     const { marks: all, crop: keep } = base()
     if (d.kind === 'line') {
       // 分岔出來的路線與原路線共用的點一起移動
@@ -504,6 +699,7 @@ function Editor({
   const endDrag = () => {
     // click 事件在 pointerup 之後才觸發：等它過去再清除，拖曳結束時不會多加一點
     setTimeout(() => (dragging.current = null))
+    setLoupe(undefined)
   }
 
   const pickedLive = !preview && mode !== 'crop' && picked && (picked.kind === 'line' ? !!current.line?.[picked.index] : !!current.bolts?.[picked.pos]) ? picked : undefined
@@ -595,7 +791,11 @@ function Editor({
     onPointerMove: onDrag,
     onPointerUp: endDrag,
     onLostPointerCapture: endDrag,
-    onClick: (e: ReactMouseEvent) => e.stopPropagation(),
+    onClick: (e: ReactMouseEvent) => {
+      e.stopPropagation()
+      // 點一下（沒拖）選了點：手機版放大到點附近，方便調整
+      if (target.kind === 'line') zoomToPoint(target.at)
+    },
   })
 
   const handles = (k: number) =>
@@ -612,8 +812,8 @@ function Editor({
                 className={[i === 0 && 'start', pickedLive?.kind === 'line' && pickedLive.index === i && 'picked'].filter(Boolean).join(' ') || undefined}
                 cx={x}
                 cy={y}
-                r={(coarse ? 13 : 6) * k}
-                strokeWidth={2 * k}
+                r={(coarse ? 7 : 5) * k}
+                strokeWidth={1.5 * k}
                 // 手指：按下的是外面那圈透明的 .topo-hits（比看得到的點大）
                 pointerEvents={coarse ? 'none' : undefined}
                 {...(coarse ? {} : grab({ kind: 'line', index: i, at: p }))}
@@ -692,7 +892,7 @@ function Editor({
   )
 
   const photoPane = (
-    <ZoomPane>
+    <ZoomPane holding={() => !!aim.current?.on} focus={focus}>
       {(zoom) => (
         <TopoFrame
           photo={photo}
@@ -713,8 +913,9 @@ function Editor({
                   highlight={selected}
                   info={info}
                   crop={shownCrop}
+                  editing
                   // 手機版選路線時：點照片上的線換到那條路線
-                  onPick={mode === 'select' && !preview && !isForking ? pick : undefined}
+                  onPick={mode === 'select' && !preview && !isForking ? choose : undefined}
                 />
                 {handles(k)}
                 {forkPoints(k)}
@@ -736,7 +937,7 @@ function Editor({
         const total = boltPositions(r).length
         return (
           <li key={r.id}>
-            <button className={`topo-route-row${r.id === selected ? ' on' : ''}`} onClick={() => (pick(r.id), after?.())}>
+            <button className={`topo-route-row${r.id === selected ? ' on' : ''}`} onClick={() => (choose(r.id), after?.())}>
               <span className="topo-route-no">{r.number ?? '·'}</span>
               <span className="topo-route-name">{localName(r.name, lang).main}</span>
               <GradePill grade={r.grade} value={r.gradeValue} size="sm" />
@@ -789,7 +990,22 @@ function Editor({
 
   if (onClose) {
     const status = error ?? (needRoute ? t('topo.needRoute') : changed && draft?.base !== latest?.id ? t('topo.newerVersion') : undefined)
-    const done = () => (setMode('select'), setPicked(undefined), setBoltPos(undefined))
+    const done = () => {
+      setMode('select')
+      setPicked(undefined)
+      setBoltPos(undefined)
+      zoomToRoute(selected)
+    }
+    /** 返回手勢：一次退一層（更多、預覽、分岔、裁切、畫線／放 bolt、選取的點），都沒有才關閉編輯器 */
+    const backStep = () => {
+      if (sheet) setSheet(undefined)
+      else if (preview) setPreview(undefined)
+      else if (isForking) setForking(false)
+      else if (mode !== 'select') done()
+      else if (pickedLive) setPicked(undefined)
+      else return false
+      return true
+    }
     const float = (label: string, onClick: () => void, opts: { icon?: ReactNode; primary?: boolean; disabled?: boolean; iconOnly?: boolean } = {}) => (
       <button
         type="button"
@@ -828,26 +1044,47 @@ function Editor({
     ) : (
       <>
         {deleteButton}
-        {float('Bolt', () => setMode('bolt'), { icon: <Icon d="M7 7l10 10M17 7 7 17" />, disabled: positions.length === 0 })}
-        {float(current.line?.length ? t('topo.continueLine') : t('topo.drawLine'), () => (setMode('line'), setPicked(undefined)), {
-          icon: <Icon d="M4 20 14 10M14 10l2-6 4 4-6 2" />,
-          primary: true,
-          disabled: !route,
-        })}
+        {float(
+          'Bolt',
+          () => {
+            setMode('bolt')
+            zoomToRoute(selected)
+          },
+          { icon: <Icon d="M9 3h6l3 7-6 11-6-11zM12 8.5v.01" />, iconOnly: true, disabled: positions.length === 0 },
+        )}
+        {float(
+          current.line?.length ? t('topo.continueLine') : t('topo.drawLine'),
+          () => {
+            setMode('line')
+            setPicked(undefined)
+            // 繼續畫：放大到最後一點附近
+            const last = current.line?.at(-1)
+            if (last) zoomToPoint(last)
+          },
+          { icon: <Icon d="M4 20l4-1L19 8l-3-3L5 16zM14 7l3 3" />, iconOnly: true, primary: true, disabled: !route },
+        )}
         {float(t('route.actionsMore'), () => setSheet('more'), { icon: <Icon d="M5 12h.01M12 12h.01M19 12h.01" />, iconOnly: true })}
       </>
     )
     return (
-      <PhoneShell onClose={onClose}>
-        <header className="topo-phone-top">
-          <CloseButton onClose={onClose} />
-          <b className="topo-phone-title">{t('topo.editTitle')}</b>
-          <button type="button" className="edit-btn primary" disabled={!changed || needRoute || busy || !!preview} onClick={() => void submit()}>
-            {busy ? t('topo.submitting') : saved && !changed ? t('topo.saved') : t('topo.submit')}
-          </button>
-        </header>
+      <PhoneShell onClose={onClose} onBack={backStep} overlay={{ kind: 'topo', route: initial, photo: photo.id, selected }} label={t('topo.editTitle')}>
         <div className="topo-phone-photo" style={{ '--fit-aspect': fitAspect } as CSSProperties}>
-          <div className="topo-edit-photo">{photoPane}</div>
+          <div className="topo-edit-photo" {...aimHandlers}>
+            {photoPane}
+          </div>
+          {/* 照片盡量大：關閉、提交浮在照片上面 */}
+          <div className="topo-phone-top">
+            <CloseButton />
+            <button
+              type="button"
+              className="topo-float-btn primary topo-phone-submit"
+              disabled={!changed || needRoute || busy || !!preview}
+              onClick={() => void submit()}
+            >
+              {busy ? t('topo.submitting') : saved && !changed ? t('topo.saved') : t('topo.submit')}
+            </button>
+          </div>
+          {loupe && <Loupe photo={photo} loupe={loupe} line={current.line} />}
           {mode === 'bolt' && !preview && <div className="topo-float-chips">{positionsRow}</div>}
           {floating && (
             <div className="topo-float" role="toolbar" aria-label={t('topo.toolbar')}>

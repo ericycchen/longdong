@@ -513,7 +513,7 @@ try {
   await phone.page.goto(base + 'edit/topo/e2ephone')
   await phone.page.waitForSelector('dialog.topo-phone[open] .topo-phone-list .topo-route-row')
   check('手機寬度也能編輯 Topo（不是「請用電腦」）', (await phone.page.locator('.topo-zoom').count()) === 1 && (await phone.page.locator('.edit-message').count()) === 0)
-  check('手機：Topo 編輯器是整個畫面：上面只有關閉與提交，沒有電腦版的工具列', (await phone.page.locator('.topo-phone-top .topo-phone-close').count()) === 1 && (await phone.page.locator('.topo-phone-top .edit-btn.primary').count()) === 1 && (await phone.page.locator('.topo-edit-toolbar').count()) === 0)
+  check('手機：Topo 編輯器是整個畫面：只有關閉與提交，沒有電腦版的工具列', (await phone.page.locator('.topo-phone-top .topo-phone-close').count()) === 1 && (await phone.page.locator('.topo-phone-top .topo-phone-submit').count()) === 1 && (await phone.page.locator('.topo-edit-toolbar').count()) === 0)
   const covered = await phone.page.evaluate(`document.elementFromPoint(195, 830)?.closest('dialog.topo-phone') !== null`)
   check('手機：編輯畫面蓋住底部導覽（整個畫面給這個項目）', covered === true)
   const zoomBottom = (await phone.page.locator('.topo-zoom').boundingBox())!
@@ -523,6 +523,10 @@ try {
   const phonePhoto = (await phone.page.locator('.topo-phone-photo').boundingBox())!
   const floatBox = (await phone.page.locator('.topo-float').boundingBox())!
   check('手機：按鈕浮在照片右下角', floatBox.x + floatBox.width >= phonePhoto.x + phonePhoto.width - 20 && floatBox.y + floatBox.height >= phonePhoto.y + phonePhoto.height - 20, `${floatBox.x},${floatBox.y}`)
+  const submitBox = (await phone.page.locator('.topo-phone-submit').boundingBox())!
+  check('手機：照片從畫面最上面開始（沒有標題列），關閉、提交浮在照片上', phonePhoto.y <= 1 && submitBox.y >= phonePhoto.y && submitBox.y + submitBox.height <= phonePhoto.y + 80 && submitBox.x + submitBox.width >= phonePhoto.x + phonePhoto.width - 20, `${phonePhoto.y} / ${submitBox.x},${submitBox.y}`)
+  check('手機：路線清單只有一層捲動（清單本身不另外捲動）', (await phone.page.locator('.topo-phone-list .topo-route-list').evaluate((el) => getComputedStyle(el).overflowY)) === 'visible')
+  check('手機：「畫線」「Bolt」是圖案按鈕（不佔照片的地方）', (await phone.page.locator('.topo-float .topo-float-btn span').count()) === 0)
   const toolSizes = await phone.page.locator('.topo-float .topo-float-btn').evaluateAll((els) => els.map((e) => Math.round(Math.min(e.getBoundingClientRect().width, e.getBoundingClientRect().height))))
   check('手機：浮動按鈕都夠大（至少 44 像素）', toolSizes.length >= 3 && toolSizes.every((v) => v >= 44), toolSizes.join(','))
   // 點清單選路線
@@ -547,12 +551,29 @@ try {
   pb = await phoneFrame()
   for (const [fx, fy] of [[0.3, 0.8], [0.35, 0.5], [0.3, 0.2]]) await phone.page.touchscreen.tap(pb.x + pb.width * fx, pb.y + pb.height * fy)
   check('手機：用手指點三下，標了三個點', (await phoneHandles().count()) === 3)
-  check('手機：點的把手夠大（手指按得到）', ((await phoneHandles().first().boundingBox())!.width) >= 24)
+  check('手機：看得到的點是小小的空心圈（不擋岩壁），手指按得到的範圍比較大', ((await phoneHandles().first().boundingBox())!.width) <= 20 && ((await phone.page.locator('.topo-hits circle').first().boundingBox())!.width) >= 40 && (await phoneHandles().first().evaluate((el) => getComputedStyle(el).fill)) === 'rgba(0, 0, 0, 0)')
+  check('手機：編輯時線上不顯示難度、名稱（不和點疊在一起）', (await phone.page.locator('.topo-phone .topo-note').count()) === 0)
+  // 按住不動：出現放大鏡，滑動對準，放開才放點（只放一個）
+  pb = await phoneFrame()
+  const aimFrom = { x: pb.x + pb.width * 0.6, y: pb.y + pb.height * 0.6 }
+  const aimTo = { x: aimFrom.x + 24, y: aimFrom.y + 12 }
+  await touch('touchStart', [{ ...aimFrom, id: 1 }])
+  await phone.page.waitForTimeout(400)
+  const loupeShown = await phone.page.locator('.topo-loupe').isVisible()
+  for (let step = 1; step <= 4; step++) await touch('touchMove', [{ x: aimFrom.x + 6 * step, y: aimFrom.y + 3 * step, id: 1 }])
+  const loupeBox = (await phone.page.locator('.topo-loupe').boundingBox())!
+  await touch('touchEnd', [])
+  await phone.page.waitForTimeout(400)
+  const aimedAt = await phoneHandles().evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }))
+  check('手機：按住照片出現放大鏡（在角落，不在手指底下），滑動後放開，點放在放開的位置，只多一個點', loupeShown && Math.hypot(loupeBox.x + loupeBox.width / 2 - aimTo.x, loupeBox.y + loupeBox.height / 2 - aimTo.y) > 100 && aimedAt.length === 4 && aimedAt.some((c) => Math.hypot(c.x - aimTo.x, c.y - aimTo.y) < 4) && (await phone.page.locator('.topo-loupe').count()) === 0, `${aimedAt.length} 個點`)
+  await phone.page.keyboard.press('z')
   // 單指拖曳把手：移動把手，不是捲動頁面、平移照片
   const before = await centerOf(1)
   await touch('touchStart', [{ ...before, id: 1 }])
   for (let step = 1; step <= 5; step++) await touch('touchMove', [{ x: before.x + 6 * step, y: before.y + 4 * step, id: 1 }])
+  const dragLoupe = await phone.page.locator('.topo-loupe').isVisible()
   await touch('touchEnd', [])
+  check('手機：拖曳點的時候有放大鏡，放開就收起來', dragLoupe && (await phone.page.locator('.topo-loupe').count()) === 0)
   // 緊接著的下一次點擊，Chrome 的手勢辨識（雙擊的時間窗）不會產生 click：真人的兩次操作之間不會這麼快
   await phone.page.waitForTimeout(400)
   const after = await centerOf(1)
@@ -566,14 +587,23 @@ try {
   const target = await centerOf(1)
   await phone.page.touchscreen.tap(target.x, target.y)
   check('手機：點一下把手就選取它（不會多一個點）', (await phone.page.locator('.topo-handles circle.picked').count()) === 1 && (await phoneHandles().count()) === 3 && !(await deleteTool.isDisabled()))
+  await phone.page.waitForTimeout(500)
+  const pickZoom = Number.parseInt((await phone.page.locator('.topo-zoom-fit').textContent()) ?? '100')
+  const pickedNow = (await phone.page.locator('.topo-handles circle.picked').boundingBox())!
+  const paneNow = (await phone.page.locator('.topo-zoom').boundingBox())!
+  check('手機：選了點自動放大到點附近（方便調整），點在畫面裡', pickZoom >= 250 && pickedNow.x > paneNow.x && pickedNow.x < paneNow.x + paneNow.width && pickedNow.y > paneNow.y && pickedNow.y < paneNow.y + paneNow.height, `${pickZoom}%`)
   await deleteTool.click()
   check('手機：「刪除這個點」刪掉選取的點', (await phoneHandles().count()) === 2 && (await deleteTool.isDisabled()))
+  await phone.page.locator('.topo-zoom-fit').click()
+  await phone.page.waitForTimeout(400)
   // 按在點旁邊（看得到的點之外、觸控範圍之內）也算按到它：選取，不多出一個點
   const near = await centerOf(0)
   await phone.page.touchscreen.tap(near.x + 30, near.y)
   await phone.page.waitForTimeout(400)
   check('手機：按在點旁邊 30 像素（看得到的點之外；瀏覽器自己就會多算十幾像素）也選到這個點，不多一個點', (await phone.page.locator('.topo-handles circle.picked').count()) === 1 && (await phoneHandles().count()) === 2, `${await phoneHandles().count()} 個點`)
-  // 雙指捏合：縮放，不多出一個點
+  // 雙指捏合：縮放，不多出一個點（先回到整張：選點時自動放大過）
+  await phone.page.locator('.topo-zoom-fit').click()
+  await phone.page.waitForTimeout(400)
   const zoomText = () => phone.page.locator('.topo-zoom-fit').textContent()
   pb = await phoneFrame()
   const mid = { x: pb.x + pb.width / 2, y: pb.y + pb.height / 2 }
@@ -609,13 +639,19 @@ try {
   await phone.page.screenshot({ path: process.env.PHONE_SHOT ?? 'dist-e2e/phone.png' })
   // 按「完成」：回到選路線，點照片不再加點
   await phone.page.getByRole('button', { name: '完成', exact: true }).click()
+  await phone.page.waitForTimeout(500)
+  check('手機：按「完成」自動縮放到整條路線', Number.parseInt((await phone.page.locator('.topo-zoom-fit').textContent()) ?? '0') < 600)
   await phone.page.locator('.topo-zoom-fit').click()
-  const pf = await phoneFrame()
+  await phone.page.waitForTimeout(400)
+  let pf = await phoneFrame()
   await phone.page.touchscreen.tap(pf.x + pf.width * 0.8, pf.y + pf.height * 0.6)
   await phone.page.waitForTimeout(300)
   check('手機：按「完成」之後點照片不加點，浮動按鈕換回「繼續畫」', (await phoneHandles().count()) === 3 && (await phone.page.getByRole('button', { name: '繼續畫' }).count()) === 1, `${await phoneHandles().count()} 個點`)
   // Bolt 和線分開：按 Bolt，選位置（照片上浮著一排），點照片放下
   await phone.page.getByRole('button', { name: 'Bolt' }).click()
+  await phone.page.waitForTimeout(500)
+  // 放大後照片比畫面大：位置以看得到的照片範圍（.topo-zoom）為準
+  pf = (await phone.page.locator('.topo-zoom').boundingBox())!
   const chips = phone.page.locator('.topo-float-chips .chip')
   const chipCount = await chips.count()
   await phone.page.touchscreen.tap(pf.x + pf.width * 0.8, pf.y + pf.height * 0.4)
@@ -626,6 +662,9 @@ try {
   await phone.page.locator('.topo-sheet .edit-history-toggle').click()
   const moreItems = await phone.page.locator('.topo-sheet .topo-sheet-menu button').allTextContents()
   check('手機：「更多」裡有復原、重做、分岔、裁切、清除這條路線、捨棄修改與修改記錄', ['復原', '重做', '從其他路線分岔', '裁切', '清除這條路線', '捨棄修改'].every((x) => moreItems.includes(x)) && (await phone.page.locator('.topo-sheet .topo-history').count()) === 1, moreItems.join('、'))
+  await phone.page.keyboard.press('Escape')
+  check('手機：「更多」打開時按返回（Esc），只關掉「更多」，編輯器還在', (await phone.page.locator('.topo-sheet').count()) === 0 && (await phone.page.locator('dialog.topo-phone[open]').count()) === 1 && new URL(phone.page.url()).pathname.endsWith('/edit/topo/e2ephone'), phone.page.url())
+  await phone.page.getByRole('button', { name: '更多' }).click()
   await phone.page.locator('.topo-sheet-menu button', { hasText: '裁切' }).click()
   check('手機：裁切時浮動按鈕換成「整張照片」與「完成裁切」', (await phone.page.locator('.topo-float .topo-float-btn.primary', { hasText: '完成裁切' }).count()) === 1 && (await phone.page.getByRole('button', { name: '繼續畫' }).count()) === 0)
   await phone.page.locator('.topo-float .topo-float-btn.primary', { hasText: '完成裁切' }).click()
@@ -747,6 +786,33 @@ try {
     return Object.values(all ?? {}).flatMap((v) => Object.values(v)).find((v) => v.text === 'e2e 手機說明 ✓')
   })
   check('手機路線頁：在卡片裡提交說明，資料庫多一版，卡片顯示新的說明', !!phoneText && ((await vp.locator('.community-text').textContent()) ?? '').includes('e2e 手機說明 ✓'))
+  // 說明的草稿：重新載入（App 被系統關掉再回來）回到編輯、文字還在；返回關掉編輯但留著草稿；「取消」才捨棄
+  const openText = async () => {
+    const box = (await vp.locator('.community-edit').boundingBox())!
+    await vp.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2)
+    await vp.waitForSelector('.inline-text-area', { timeout: 5000 })
+  }
+  await openText()
+  await vp.locator('.inline-text-area').fill('e2e 草稿')
+  await vp.reload()
+  await vp.waitForSelector('.inline-text-area', { timeout: 15000 })
+  check('手機路線頁：編輯說明時重新載入（App 被關掉再回來），回到編輯，打到一半的文字還在', vp.url() === routeUrl && (await vp.locator('.inline-text-area').inputValue()) === 'e2e 草稿', vp.url())
+  await vp.evaluate('history.back()')
+  await vp.waitForSelector('.inline-text-area', { state: 'detached', timeout: 5000 })
+  check('手機路線頁：編輯說明時按返回，關掉編輯、留在路線頁', vp.url() === routeUrl, vp.url())
+  await openText()
+  check('手機路線頁：返回之後再編輯，草稿還在', (await vp.locator('.inline-text-area').inputValue()) === 'e2e 草稿')
+  await vp.locator('.inline-text-actions .action:not(.primary)').click()
+  await vp.waitForSelector('.inline-text-area', { state: 'detached', timeout: 5000 })
+  await openText()
+  check('手機路線頁：按「取消」捨棄草稿，再編輯是目前的說明', (await vp.locator('.inline-text-area').inputValue()) === 'e2e 手機說明 ✓')
+  await vp.locator('.inline-text-actions .action:not(.primary)').click()
+  await vp.waitForSelector('.inline-text-area', { state: 'detached', timeout: 5000 })
+  await vp.evaluate('history.back()')
+  await vp.waitForTimeout(300)
+  check('手機路線頁：用按鈕關掉編輯後按返回，不會又打開編輯', (await vp.locator('.inline-text-area').count()) === 0)
+  await vp.goto(routeUrl)
+  await vp.waitForSelector('.route-m .topo')
   const phoneTopo = (await vp.locator('.route-m .topo').boundingBox())!
   const holdAt = { x: phoneTopo.x + phoneTopo.width / 2, y: phoneTopo.y + phoneTopo.height / 2 }
   const hold = await viewer2.ctx.newCDPSession(vp)
@@ -761,7 +827,31 @@ try {
   await vp.getByRole('menuitem', { name: '編輯：Topo' }).click()
   await vp.waitForSelector('dialog.topo-phone[open] .topo-phone-list .topo-route-row', { timeout: 10000 })
   check('手機路線頁：「更多 › 編輯：Topo」也在這一頁打開編輯器', vp.url() === routeUrl)
-  await vp.locator('.topo-phone-close').click()
+  // 返回手勢一次退一層：畫線中返回是結束畫線，編輯器還在；重新載入回到編輯（選的路線、草稿都在）；再返回才關閉
+  await vp.locator('.topo-phone-list .topo-route-row', { has: vp.locator('.topo-route-no', { hasText: new RegExp(`^${topoRoutes[1].number}$`) }) }).click()
+  await vp.waitForTimeout(400)
+  await vp.getByRole('button', { name: /^(畫線|繼續畫)$/ }).click()
+  await vp.waitForTimeout(400)
+  const pointsBefore = await vp.locator('.topo-handles circle').count()
+  const vpPane = (await vp.locator('.topo-zoom').boundingBox())!
+  await vp.touchscreen.tap(vpPane.x + vpPane.width * 0.85, vpPane.y + vpPane.height * 0.15)
+  await vp.waitForTimeout(300)
+  check('手機 Topo：畫線加了一個點', (await vp.locator('.topo-handles circle').count()) === pointsBefore + 1)
+  await vp.evaluate('history.back()')
+  await vp.waitForTimeout(400)
+  check('手機 Topo：畫線中按返回，結束畫線（不是關掉編輯器）', (await vp.locator('dialog.topo-phone[open]').count()) === 1 && (await vp.getByRole('button', { name: '繼續畫' }).count()) === 1 && vp.url() === routeUrl, vp.url())
+  await vp.reload()
+  await vp.waitForSelector('dialog.topo-phone[open] .topo-phone-list .topo-route-row', { timeout: 15000 })
+  await vp.waitForTimeout(400)
+  check('手機 Topo：編輯中重新載入（App 被關掉再回來），回到編輯器，選的路線與修改都在', (await vp.locator('.topo-phone-list .topo-route-row.on .topo-route-no').textContent()) === topoRoutes[1].number && (await vp.locator('.topo-handles circle').count()) === pointsBefore + 1, `${await vp.locator('.topo-handles circle').count()} 個點`)
+  await vp.locator('.topo-float').getByRole('button', { name: '更多' }).click()
+  await vp.evaluate('history.back()')
+  await vp.waitForTimeout(400)
+  check('手機 Topo：「更多」打開時返回，只關掉「更多」', (await vp.locator('.topo-sheet').count()) === 0 && (await vp.locator('dialog.topo-phone[open]').count()) === 1)
+  await vp.evaluate('history.back()')
+  await vp.waitForTimeout(400)
+  check('手機 Topo：沒有要退的了，返回就關閉編輯器，留在路線頁', (await vp.locator('dialog.topo-phone').count()) === 0 && vp.url() === routeUrl, vp.url())
+  await vp.evaluate(`Object.keys(localStorage).filter((k) => k.startsWith('longdong.topoDraft.')).forEach((k) => localStorage.removeItem(k))`)
   const noTopoRoute = data.areas.flatMap((a) => a.sectors).find((x) => x.id !== topoSector.id)!.routes.find((r) => r.number)!
   await vp.goto(base + `route/${noTopoRoute.id}`)
   await vp.waitForSelector('.route-m h1')

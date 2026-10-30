@@ -5116,6 +5116,11 @@ button.key-row:disabled {
   transform-origin: center;
 }
 
+/* 自動縮放（選路線、選點）：平滑地移過去 */
+.topo-zoom.gliding .topo-zoom-inner {
+  transition: transform 0.3s ease;
+}
+
 .topo-zoom.panning,
 .topo-zoom.panning svg {
   cursor: grab;
@@ -5160,8 +5165,10 @@ button.key-row:disabled {
 
 .topo-handles circle,
 .topo-handles rect {
-  fill: rgba(255, 255, 255, 0.92);
-  stroke: #c8102e;
+  /* 空心的圈：岩壁看得到；外面一圈暗邊，淺色的岩壁上也看得清楚 */
+  fill: transparent;
+  stroke: #fff;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.9));
   cursor: move;
 }
 
@@ -5183,8 +5190,8 @@ button.key-row:disabled {
 }
 
 .topo-handles circle.start {
-  fill: #c8102e;
-  stroke: #fff;
+  fill: transparent;
+  stroke: #ffd400;
 }
 
 .topo-fork circle {
@@ -5352,8 +5359,8 @@ button.key-row:disabled {
 
 .topo-handles circle.picked,
 .topo-handles rect.bolt.picked {
-  fill: var(--brand);
-  stroke: #fff;
+  fill: rgba(255, 90, 54, 0.25);
+  stroke: var(--brand);
 }
 
 .topo-handles rect.bolt.picked {
@@ -5651,7 +5658,7 @@ html {
 
 /* ---------- Topo 編輯：手機版（整個畫面，src/topo/TopoEditor.tsx 的 PhoneShell） ---------- */
 
-/* 上面：關閉、標題、提交；照片（右下角浮動按鈕）；可拖曳的分隔線；下面是路線清單 */
+/* 照片佔滿上面（關閉、提交浮在左上、右上，工具浮在右下）；可拖曳的分隔線；下面是路線清單 */
 dialog.topo-phone {
   width: 100%;
   max-width: none;
@@ -5674,20 +5681,25 @@ dialog.topo-phone::backdrop {
 }
 
 .topo-phone-top {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 3;
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 4px;
-  padding: calc(6px + env(safe-area-inset-top)) 8px 6px;
-  background: var(--surface);
+  padding: calc(8px + env(safe-area-inset-top)) 8px 0;
+  pointer-events: none;
 }
 
-.topo-phone-top .edit-btn.primary {
-  min-height: 40px;
+.topo-phone-top > * {
+  pointer-events: auto;
 }
 
-.topo-phone-title {
-  flex: 1;
-  text-align: center;
+/* 沒有照片的畫面（載入中、上傳）：上面一排照常排在畫面裡 */
+.topo-phone > .topo-phone-top {
+  position: static;
 }
 
 .topo-phone-close {
@@ -5699,8 +5711,9 @@ dialog.topo-phone::backdrop {
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: transparent;
-  color: var(--text);
+  background: rgba(32, 33, 36, 0.85);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   cursor: pointer;
 }
 
@@ -5727,11 +5740,11 @@ dialog.topo-phone::backdrop {
   border-radius: 0;
 }
 
-/* 手機用雙指縮放：只留倍率（點了回到整張），移到左上；下面留給浮動按鈕 */
+/* 手機用雙指縮放：只留倍率（點了回到整張），在左下；上面是關閉、提交，右下是工具 */
 .topo-phone .topo-zoom-controls {
-  top: 8px;
+  top: auto;
   right: auto;
-  bottom: auto;
+  bottom: 8px;
   left: 8px;
 }
 
@@ -5819,14 +5832,22 @@ dialog.topo-phone::backdrop {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-/* 分隔線：上下拖曳調整照片與清單的大小 */
+/* 分隔線：上下拖曳調整照片與清單的大小；按得到的範圍往下延伸，不必按得很準 */
 .topo-split {
+  position: relative;
   display: grid;
+  flex: none;
   place-items: center;
   height: 20px;
   background: var(--surface);
   cursor: row-resize;
   touch-action: none;
+}
+
+.topo-split::after {
+  content: '';
+  position: absolute;
+  inset: -4px 0 -16px;
 }
 
 .topo-split::before {
@@ -5838,7 +5859,8 @@ dialog.topo-phone::backdrop {
 }
 
 .topo-phone-list {
-  height: 38dvh;
+  flex: none;
+  height: 30dvh;
   min-height: 72px;
   overflow-y: auto;
   padding: 0 8px calc(8px + env(safe-area-inset-bottom));
@@ -5847,6 +5869,53 @@ dialog.topo-phone::backdrop {
 
 .topo-phone-list .topo-route-row {
   min-height: 48px;
+}
+
+/* 只有外面一層捲動（清單本身不再另外捲動，手指上下滑不會卡住） */
+.topo-phone-list .topo-route-list {
+  max-height: none;
+  overflow: visible;
+}
+
+/* 放大鏡：在照片上方的角落（避開手指），十字中心是點的位置 */
+.topo-loupe {
+  position: absolute;
+  top: calc(60px + env(safe-area-inset-top));
+  left: 8px;
+  z-index: 4;
+  width: 128px;
+  height: 128px;
+  overflow: hidden;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #000;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+.topo-loupe.right {
+  right: 8px;
+  left: auto;
+}
+
+.topo-loupe svg {
+  display: block;
+}
+
+.topo-loupe-line {
+  fill: none;
+  stroke: var(--topo-line, #ff5a36);
+  stroke-linecap: round;
+}
+
+.topo-loupe-point {
+  fill: transparent;
+  stroke: #fff;
+}
+
+.topo-loupe-cross {
+  stroke: #ffd400;
+  stroke-linecap: round;
 }
 
 .topo-phone-status {
@@ -5863,13 +5932,25 @@ dialog.topo-phone::backdrop {
 }
 
 /* 「更多」從下方滑出：復原、重做、分岔、裁切、清除、捨棄、修改記錄 */
-.topo-sheet-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 10;
-  display: flex;
-  align-items: flex-end;
+dialog.topo-sheet-backdrop {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
   background: rgba(0, 0, 0, 0.45);
+  color: var(--text);
+  align-items: flex-end;
+}
+
+dialog.topo-sheet-backdrop[open] {
+  display: flex;
+}
+
+dialog.topo-sheet-backdrop::backdrop {
+  background: transparent;
 }
 
 .topo-sheet {

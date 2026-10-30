@@ -107,6 +107,8 @@ const MIN_LABEL_LINE_PX = 40
 /** 線在畫面上這麼長才多顯示難度、再長才多顯示名稱；選到的路線一律顯示 */
 const GRADE_LINE_PX = 110
 const NAME_LINE_PX = 240
+/** 編輯時線上的點（把手）佔的範圍（半徑，螢幕像素）：牌子不蓋在上面 */
+const EDIT_POINT_PX = 12
 /** 編號牌放在線上的候選位置（占全長的比例）：先放正中間，不行再往兩邊找 */
 const LABEL_SPOTS = [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82]
 
@@ -122,6 +124,7 @@ interface Plan {
  * 放大、空間夠了才多顯示難度、名稱、bolt 的材質與年份。
  * highlight 的路線用亮色、其他變淡；bolts 決定畫哪些路線的 bolt 與 anchor（預設只畫 highlight 的）；
  * 有 link 時點線段換到那條路線。兩條路線共用的線段只畫一次。
+ * editing（編輯時）：線畫細一點、不顯示難度名稱等說明；牌子避開 highlight 路線的點（點上有把手），放不下就不顯示。
  */
 export function TopoLines({
   photo,
@@ -134,6 +137,7 @@ export function TopoLines({
   link,
   onPick,
   crop,
+  editing,
 }: {
   photo: TopoPhoto
   marks: Marks
@@ -148,6 +152,7 @@ export function TopoLines({
   /** 點線段時改為呼叫這個（不換頁）；優先於 link */
   onPick?: (id: string) => void
   crop?: Crop
+  editing?: boolean
 }) {
   const c = crop ?? FULL_CROP
   const u = uiScale()
@@ -167,6 +172,13 @@ export function TopoLines({
 
   // ── 自動排版：依優先順序放牌子，放不下的藏起來 ──
   const placer = new Placer({ x: bx, y: by, w: bw, h: bh }, 3 * k)
+  if (editing && highlight) {
+    const r = EDIT_POINT_PX * k
+    for (const p of marks[highlight]?.line ?? []) {
+      const [x, y] = px(photo, p)
+      placer.reserve({ x: x - r, y: y - r, w: 2 * r, h: 2 * r })
+    }
+  }
   const plan = new Map<string, Plan>(priority.map((id) => [id, { bolts: [] }]))
   const length = new Map(priority.map((id) => [id, (lineOf(id) ? pathLength(lineOf(id)!) : 0) / k]))
   // 1. 路線編號牌
@@ -187,7 +199,7 @@ export function TopoLines({
       if (!low) continue
       spots = [centeredBox([low[0], low[1] + h], w, h), centeredBox([low[0], low[1] - h], w, h)]
     }
-    plan.get(id)!.pill = placer.place(spots, id === highlight)
+    plan.get(id)!.pill = placer.place(spots, id === highlight && !editing)
   }
   // 2. bolt、anchor 的牌子
   for (const id of priority) {
@@ -196,12 +208,13 @@ export function TopoLines({
       const anchor = pos.startsWith('A')
       const label = anchor ? '××' : `× ${pos}`
       const at = px(photo, p) as Pt
-      const pill = placer.place([centeredBox(at, (textWidth(label, BOLT_FONT) + 12) * k, BOLT_H * k)])
+      // 編輯時 bolt 一定要看得到（牌子就是拖曳的地方）
+      const pill = placer.place([centeredBox(at, (textWidth(label, BOLT_FONT) + 12) * k, BOLT_H * k)], editing)
       if (pill) plan.get(id)!.bolts.push({ pos, at, anchor, label, pill })
     }
   }
   // 3. 多的說明：編號牌下面的難度與名稱、bolt 旁邊的材質與年份（空間夠才顯示）
-  for (const id of priority) {
+  for (const id of editing ? [] : priority) {
     const entry = plan.get(id)!
     const i = info?.get(id)
     if (entry.pill && i) {
@@ -256,12 +269,12 @@ export function TopoLines({
               return (
                 <g key={i}>
                   <path className="topo-hit" d={d} strokeWidth={18 * k} />
-                  <path className="topo-halo" d={d} strokeWidth={(on ? 7 : 5.5) * k} />
-                  <path className="topo-line" d={d} strokeWidth={(on ? 4 : 2.8) * k} />
+                  <path className="topo-halo" d={d} strokeWidth={(editing ? (on ? 3.6 : 3) : on ? 7 : 5.5) * k} />
+                  <path className="topo-line" d={d} strokeWidth={(editing ? (on ? 2 : 1.6) : on ? 4 : 2.8) * k} />
                 </g>
               )
             })}
-            {start && <circle className="topo-start" cx={start[0]} cy={start[1]} r={(on ? 5.5 : 4.5) * k} strokeWidth={1.5 * k} />}
+            {start && !(editing && on) && <circle className="topo-start" cx={start[0]} cy={start[1]} r={(editing ? 3 : on ? 5.5 : 4.5) * k} strokeWidth={(editing ? 1 : 1.5) * k} />}
           </>
         )
         return pick ? (

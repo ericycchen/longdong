@@ -651,7 +651,7 @@ function TopoItemView({ item, data }: { item: EditItem; data: LoadedData }) {
   return (
     <>
       <section className="edit-center edit-topo">
-        <TopoEditor data={data} id={item.id} embedded side={side} onClose={() => navigate(href.edit())} />
+        <TopoEditor data={data} id={item.id} embedded side={side} onClose={() => navigate(href.edit(), { replace: true })} />
       </section>
       <aside className="edit-panel">
         <DockHead part="panel" title={t('edit.panel')} />

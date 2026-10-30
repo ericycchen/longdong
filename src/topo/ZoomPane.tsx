@@ -1,11 +1,22 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useLang } from '../i18n'
-import { clampView, IDENTITY, moveView, type Pt, type Size, type View } from './viewport'
+import { clampView, IDENTITY, MAX_SCALE, moveView, type Pt, type Size, type View } from './viewport'
+
+/** 要縮放到的一塊（照片上的比例 0–1）；seq 不同才算新的一次 */
+export interface ZoomFocus {
+  x: number
+  y: number
+  w: number
+  h: number
+  seq: number
+  /** 只放大不縮小（放大到一個點）：使用者自己放得更大時維持 */
+  keepZoom?: boolean
+}
 
 /** 一次按 ＋／－ 或鍵盤 +／- 的縮放倍率 */
 const STEP = 1.5
 /** 滑鼠移動超過這個距離（螢幕像素）才算拖曳，之前都當作點擊 */
-const DRAG_PX = 5
+export const DRAG_PX = 5
 /** 編輯用：在照片上按住不動超過這個時間（毫秒），接著拖曳就是平移 */
 const LONG_PRESS_MS = 350
 
@@ -18,8 +29,20 @@ const LONG_PRESS_MS = 350
  * 手指（編輯）：單指點一下標記；放大後單指在空白處拖曳平移，雙指捏合縮放、同時平移（照片上的把手自己要能拖）。
  * 觀看用（viewing）：照片上沒有要標記的東西，放大後直接按住左鍵拖曳平移（沒拖動就是點路線）；
  * 頁面要能捲動，所以滾輪要按住 Ctrl（⌘、觸控板的雙指縮放）才縮放，+／-／0 只在游標停在照片上時有效。
+ * holding：回傳 true 時手指按住的拖曳留給外面（手機版編輯按住瞄準加點），不平移。
+ * focus：換一個值（seq）就平滑地縮放到那一塊（照片上的比例 0–1）；那一塊已經整個看得到、放得夠大時不動。
  */
-export function ZoomPane({ children, viewing }: { children: (zoom: number) => ReactNode; viewing?: boolean }) {
+export function ZoomPane({
+  children,
+  viewing,
+  holding,
+  focus,
+}: {
+  children: (zoom: number) => ReactNode
+  viewing?: boolean
+  holding?: () => boolean
+  focus?: ZoomFocus
+}) {
   const { t } = useLang()
   const box = useRef<HTMLDivElement>(null)
   const [stage, setStage] = useState<Size>({ w: 0, h: 0 })
@@ -53,6 +76,27 @@ export function ZoomPane({ children, viewing }: { children: (zoom: number) => Re
   useEffect(() => setView((v) => clampView(v, stage, stage)), [stage])
 
   useEffect(() => () => clearTimeout(longTimer.current), [])
+
+  // 自動縮放：動畫只在這一次（手指一按下就停掉，不拖慢手勢）
+  const [gliding, setGliding] = useState(false)
+  useEffect(() => {
+    if (!focus || stage.w === 0) return
+    setView((v) => {
+      const box = { x: (focus.x - 0.5) * stage.w, y: (focus.y - 0.5) * stage.h, w: focus.w * stage.w, h: focus.h * stage.h }
+      const fit = Math.min(MAX_SCALE, Math.max(1, Math.min(stage.w / Math.max(box.w, 1), stage.h / Math.max(box.h, 1))))
+      const scale = focus.keepZoom ? Math.max(fit, v.scale) : fit
+      // 已經整個看得到、而且放得比要的還大：不動
+      const seen = (at: number, size: number, room: number, shift: number) => Math.abs(shift + at * v.scale) + (size * v.scale) / 2 <= room / 2
+      if (v.scale >= scale && seen(box.x + box.w / 2, box.w, stage.w, v.x) && seen(box.y + box.h / 2, box.h, stage.h, v.y)) return v
+      const cx = box.x + box.w / 2
+      const cy = box.y + box.h / 2
+      return clampView({ scale, x: -cx * scale, y: -cy * scale }, stage, stage)
+    })
+    setGliding(true)
+    const timer = setTimeout(() => setGliding(false), 350)
+    return () => clearTimeout(timer)
+    // 只在 focus 換了（或舞台第一次量到大小）的時候
+  }, [focus, stage.w > 0])
 
   /** 滑鼠位置換成以舞台中心為原點的座標 */
   const rel = (e: { clientX: number; clientY: number }): Pt => {
@@ -105,6 +149,7 @@ export function ZoomPane({ children, viewing }: { children: (zoom: number) => Re
   }
   // 平移：在捕獲階段攔下，照片上的點、把手收不到這次按下；指標鎖在這個區域
   const startPan = (e: ReactPointerEvent) => {
+    setGliding(false)
     // 控制按鈕自己要能按（包括關掉「移動」）
     if ((e.target as Element).closest('.topo-zoom-controls')) return
     // 第一根手指就是新的一輪（上一輪漏收的放開不留著）
@@ -132,6 +177,7 @@ export function ZoomPane({ children, viewing }: { children: (zoom: number) => Re
       if (e.button === 0 && !(e.target as Element).closest('.topo-handles, .topo-hits, .topo-fork, .topo-crop')) {
         clearTimeout(longTimer.current)
         longTimer.current = setTimeout(() => {
+          if (holding?.()) return
           armed.current = true
           setLong(true)
         }, LONG_PRESS_MS)
@@ -163,7 +209,7 @@ export function ZoomPane({ children, viewing }: { children: (zoom: number) => Re
         clearTimeout(longTimer.current)
         dragged.current = true
       }
-      const fingerPan = e.pointerType === 'touch' && far && view.scale > 1 && !onHandle.current
+      const fingerPan = e.pointerType === 'touch' && far && view.scale > 1 && !onHandle.current && !holding?.()
       if (viewing ? far && view.scale > 1 : armed.current || fingerPan) startPanAt(e)
     }
     const from = pan.current
@@ -193,7 +239,7 @@ export function ZoomPane({ children, viewing }: { children: (zoom: number) => Re
   return (
     <div
       ref={box}
-      className={`topo-zoom${space || hand || long ? ' panning' : ''}${viewing && view.scale > 1 ? ' draggable' : ''}${viewing ? '' : ' pinchable'}`}
+      className={`topo-zoom${gliding ? ' gliding' : ''}${space || hand || long ? ' panning' : ''}${viewing && view.scale > 1 ? ' draggable' : ''}${viewing ? '' : ' pinchable'}`}
       onPointerDownCapture={startPan}
       onClickCapture={stopClick}
       onPointerEnter={() => (hover.current = true)}
