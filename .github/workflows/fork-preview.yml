@@ -1,0 +1,63 @@
+name: Fork preview
+
+# 只在 Eric 的 fork（ericycchen/longdong）執行，上游不會跑：
+# - fork 裡的 PR（功能分支 → fork 的 main）→ 部署到暫時的預覽網址，連結貼在 PR 留言，7 天後失效
+# - fork 的 main → 部署到這個網站的正式網址
+# 用的是 climber-buddy 的 Firebase 專案裡另外一個 Hosting 網站，不碰 TOCC 的開發站與正式站。
+# 需要在 fork 的 Settings → Secrets and variables → Actions 設定：
+#   Secret   FIREBASE_SERVICE_ACCOUNT  部署用的 service account 金鑰（JSON）
+#   Variable FIREBASE_PROJECT          Firebase 專案 ID
+#   Variable FIREBASE_SITE             Hosting 網站名稱
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+jobs:
+  preview:
+    if: github.repository == 'ericycchen/longdong'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: fork-preview-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # 版號的最後一碼是提交數，需要完整的 git 歷史
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # 分享圖片的字型（scripts/lib/ogImage.ts）
+      - run: bash scripts/install-og-fonts.sh
+
+      # VITE_CHANNEL=dev：畫面上標示「開發版」、不讓搜尋引擎收錄
+      - run: npm run build
+        env:
+          VITE_CHANNEL: dev
+
+      - run: jq --arg site "$SITE" '.hosting.site = $site' firebase.json > firebase.fork.json && mv firebase.fork.json firebase.json
+        env:
+          SITE: ${{ vars.FIREBASE_SITE }}
+
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: ${{ vars.FIREBASE_PROJECT }}
+          # PR：預覽網址；main：正式網址
+          channelId: ${{ github.event_name == 'push' && 'live' || '' }}
+          expires: 7d
+          # 同上游 deploy.yml：15.34.1 起部署前會查 Service Usage API
+          firebaseToolsVersion: 15.34.0
