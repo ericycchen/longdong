@@ -39,6 +39,7 @@ export function TopoEditor({
   embedded,
   side,
   initial,
+  owner,
   onClose,
 }: {
   data: LoadedData
@@ -46,6 +47,8 @@ export function TopoEditor({
   embedded?: boolean
   side: HTMLElement | null
   initial?: string
+  /** 手機版就地編輯：打開編輯器的那一頁（記在瀏覽紀錄裡） */
+  owner?: string
   onClose: () => void
 }) {
   const { lang, t } = useLang()
@@ -63,7 +66,7 @@ export function TopoEditor({
   const signedIn = cloud.status === 'signed-in'
   if (phone && !(edits && found && signedIn))
     return (
-      <PhoneShell onClose={onClose} overlay={{ kind: 'topo', route: initial, photo: id }}>
+      <PhoneShell onClose={onClose} overlay={{ kind: 'topo', owner, photo: id }}>
         <header className="topo-phone-top">
           <CloseButton />
         </header>
@@ -99,6 +102,7 @@ export function TopoEditor({
           uid={cloud.user!.uid}
           side={side}
           initial={initial}
+          owner={owner}
           onClose={phone ? onClose : undefined}
         />
       )}
@@ -107,18 +111,33 @@ export function TopoEditor({
 }
 
 /**
- * 手機路線頁的 Topo 編輯（不換頁）：photo 沒指定時用標了這條路線的第一張，沒有就用分區的第一張；
- * 分區還沒有照片時先上傳，上傳完接著編輯那一張。
+ * 手機版在路線頁、分區頁、區域頁就地編輯 Topo（不換頁，關閉回到原來那一頁）：
+ * photo 沒指定時用標了這條路線（routeId）的第一張，沒有就用分區的第一張；分區還沒有照片時先上傳，上傳完接著編輯那一張。
+ * owner：打開編輯器的那一頁。
  */
-export function RouteTopoEditor({ data, sector, routeId, photo, onClose }: { data: LoadedData; sector: Sector; routeId: string; photo?: string; onClose: () => void }) {
+export function InlineTopoEditor({
+  data,
+  sector,
+  routeId,
+  photo,
+  owner,
+  onClose,
+}: {
+  data: LoadedData
+  sector: Sector
+  routeId?: string
+  photo?: string
+  owner: string
+  onClose: () => void
+}) {
   const { t } = useLang()
   const cloud = useCloud()
   const topos = useSectorTopos(sector.id)
   const [uploaded, setUploaded] = useState<string>()
-  const id = photo ?? uploaded ?? (topos?.find((x) => x.latest?.marks[routeId]) ?? topos?.[0])?.photo.id
-  if (id) return <TopoEditor data={data} id={id} side={null} initial={routeId} onClose={onClose} />
+  const id = photo ?? uploaded ?? ((routeId && topos?.find((x) => x.latest?.marks[routeId])) || topos?.[0])?.photo.id
+  if (id) return <TopoEditor data={data} id={id} side={null} initial={routeId} owner={owner} onClose={onClose} />
   return (
-    <PhoneShell onClose={onClose} overlay={{ kind: 'topo', route: routeId }}>
+    <PhoneShell onClose={onClose} overlay={{ kind: 'topo', owner }}>
       <header className="topo-phone-top">
         <CloseButton />
       </header>
@@ -339,6 +358,7 @@ function Editor({
   uid,
   side,
   initial,
+  owner,
   onClose,
 }: {
   photo: TopoPhoto
@@ -348,6 +368,7 @@ function Editor({
   uid: string
   side: HTMLElement | null
   initial?: string
+  owner?: string
   /** 手機版：整個畫面的編輯器，關閉時呼叫 */
   onClose?: () => void
 }) {
@@ -1067,7 +1088,7 @@ function Editor({
       </>
     )
     return (
-      <PhoneShell onClose={onClose} onBack={backStep} overlay={{ kind: 'topo', route: initial, photo: photo.id, selected }} label={t('topo.editTitle')}>
+      <PhoneShell onClose={onClose} onBack={backStep} overlay={{ kind: 'topo', owner, photo: photo.id, selected }} label={t('topo.editTitle')}>
         <div className="topo-phone-photo" style={{ '--fit-aspect': fitAspect } as CSSProperties}>
           <div className="topo-edit-photo" {...aimHandlers}>
             {photoPane}

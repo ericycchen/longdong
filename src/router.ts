@@ -140,6 +140,12 @@ export function navigate(to: string, { replace = false } = {}): void {
   window.dispatchEvent(new Event(CHANGE))
 }
 
+/** 回到上一頁（站內有上一筆瀏覽紀錄時，例如關閉編輯器回到打開它的那一頁）；沒有時換成 fallback */
+export function goBack(fallback: string): void {
+  if (depth() > 0) history.back()
+  else navigate(fallback, { replace: true })
+}
+
 /** 這筆瀏覽紀錄是第幾筆（navigate 記在 history.state）：比較前後就知道是返回還是往前 */
 function depth(): number {
   return (history.state as { depth?: number } | null)?.depth ?? 0

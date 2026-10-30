@@ -30,8 +30,8 @@ function Photo({ topo, alt, render }: { topo: SectorTopo; alt: string; render: (
   return wide ? <ZoomPane viewing>{frame}</ZoomPane> : frame(1)
 }
 
-/** 分區頁：這個分區的所有 Topo，點線段換到那條路線；電腦版登入後可以新增照片、編輯 */
-export function SectorTopos({ sector }: { sector: Sector }) {
+/** 分區頁：這個分區的所有 Topo，點線段換到那條路線；手機版（onEdit）長按照片在這一頁編輯 */
+export function SectorTopos({ sector, onEdit }: { sector: Sector; onEdit?: (photo: string) => void }) {
   const { lang, t } = useLang()
   const topos = useSectorTopos(sector.id)
   const { link, selected } = useRouteLink()
@@ -42,7 +42,7 @@ export function SectorTopos({ sector }: { sector: Sector }) {
   return (
     <section className="topos" aria-label={t('topo.title')}>
       {topos.map((topo) => (
-        <figure key={topo.photo.id} className="topo">
+        <EditableFigure key={topo.photo.id} onEdit={onEdit && (() => onEdit(topo.photo.id))}>
           <Photo
             topo={topo}
             alt={t('topo.alt', { name: localName(sector.name, lang).main })}
@@ -63,7 +63,7 @@ export function SectorTopos({ sector }: { sector: Sector }) {
             }
           />
           {topo.latest && <FullscreenButton topo={topo} sector={sector} initial={selected} />}
-        </figure>
+        </EditableFigure>
       ))}
     </section>
   )

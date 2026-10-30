@@ -852,6 +852,37 @@ try {
   await vp.waitForTimeout(400)
   check('手機 Topo：沒有要退的了，返回就關閉編輯器，留在路線頁', (await vp.locator('dialog.topo-phone').count()) === 0 && vp.url() === routeUrl, vp.url())
   await vp.evaluate(`Object.keys(localStorage).filter((k) => k.startsWith('longdong.topoDraft.')).forEach((k) => localStorage.removeItem(k))`)
+  // 分區頁、區域頁也在這一頁編輯：關閉、返回都回到原來那一頁（不會跑到編輯模式的目錄）
+  const sectorUrl = base + `sector/${topoSector.id}`
+  await vp.goto(sectorUrl)
+  await vp.waitForSelector('.topos .topo img')
+  await vp.locator('.page-tools .tool-button[aria-haspopup="menu"]').click()
+  await vp.getByRole('menuitem', { name: '編輯：Topo' }).click()
+  await vp.waitForSelector('dialog.topo-phone[open] .topo-phone-list .topo-route-row', { timeout: 10000 })
+  check('手機分區頁：「更多 › 編輯：Topo」在這一頁打開編輯器（不換到編輯模式）', vp.url() === sectorUrl, vp.url())
+  await vp.locator('.topo-phone-close').click()
+  check('手機分區頁：關閉編輯器回到分區頁', (await vp.locator('dialog.topo-phone').count()) === 0 && vp.url() === sectorUrl, vp.url())
+  const sectorTopo = (await vp.locator('.topos .topo').first().boundingBox())!
+  const sectorHold = await viewer2.ctx.newCDPSession(vp)
+  await sectorHold.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: sectorTopo.x + sectorTopo.width / 2, y: sectorTopo.y + sectorTopo.height / 2, id: 1 }] })
+  await vp.waitForTimeout(800)
+  await sectorHold.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  await vp.waitForSelector('dialog.topo-phone[open] .topo-phone-list .topo-route-row', { timeout: 10000 })
+  check('手機分區頁：長按 Topo 在這一頁編輯那一張', vp.url() === sectorUrl, vp.url())
+  await vp.evaluate('history.back()')
+  await vp.waitForTimeout(400)
+  check('手機分區頁：編輯 Topo 時返回，回到分區頁', (await vp.locator('dialog.topo-phone').count()) === 0 && vp.url() === sectorUrl, vp.url())
+  const topoArea = data.areas.find((x) => x.sectors.some((y) => y.id === topoSector.id))!
+  const areaUrl = base + `area/${topoArea.id}`
+  await vp.goto(areaUrl)
+  await vp.waitForSelector('.area-hero-wrap')
+  await vp.locator('.page-tools .tool-button[aria-haspopup="menu"]').click()
+  await vp.getByRole('menuitem', { name: '編輯：區域說明' }).click()
+  await vp.waitForSelector('.inline-text-area', { timeout: 5000 })
+  check('手機區域頁：「更多 › 編輯：區域說明」在卡片裡編輯（不換到編輯模式）', vp.url() === areaUrl, vp.url())
+  await vp.evaluate('history.back()')
+  await vp.waitForSelector('.inline-text-area', { state: 'detached', timeout: 5000 })
+  check('手機區域頁：編輯說明時返回，回到區域頁', vp.url() === areaUrl, vp.url())
   const noTopoRoute = data.areas.flatMap((a) => a.sectors).find((x) => x.id !== topoSector.id)!.routes.find((r) => r.number)!
   await vp.goto(base + `route/${noTopoRoute.id}`)
   await vp.waitForSelector('.route-m h1')

@@ -1,10 +1,10 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
-/** 手機就地編輯記在瀏覽紀錄裡的狀態：哪一條路線、編輯什麼（重新載入、App 被系統關掉再回來時恢復） */
+/** 手機就地編輯記在瀏覽紀錄裡的狀態：在哪一頁、編輯什麼（重新載入、App 被系統關掉再回來時恢復） */
 export interface EditOverlay {
   kind: 'text' | 'topo'
-  /** 從路線頁打開時是那條路線 */
-  route?: string
+  /** 打開編輯的那一頁（路線、分區、區域的 id） */
+  owner?: string
   photo?: string
   /** Topo 編輯器裡選的路線 */
   selected?: string
@@ -15,6 +15,18 @@ const KEY = 'editOverlay'
 /** 目前這筆瀏覽紀錄記著的就地編輯（沒有時 undefined） */
 export function savedOverlay(): EditOverlay | undefined {
   return (history.state as Record<string, unknown> | null)?.[KEY] as EditOverlay | undefined
+}
+
+/** 手機版在這一頁就地編輯的項目：說明（卡片裡）、Topo（photo：長按的那一張；從選單進入時不指定） */
+export type InlineEditing = { kind: 'text' } | { kind: 'topo'; photo?: string }
+
+/** 這一頁（owner）就地編輯的狀態；重新載入、App 被系統關掉再回來時，從瀏覽紀錄回到原來的編輯 */
+export function useInlineEditing(owner: string) {
+  return useState<InlineEditing | undefined>(() => {
+    const saved = savedOverlay()
+    if (saved?.owner !== owner) return undefined
+    return saved.kind === 'topo' ? { kind: 'topo', photo: saved.photo } : { kind: 'text' }
+  })
 }
 
 /**

@@ -8,7 +8,7 @@ import { SafetyLight } from '../components/SafetyLight'
 import { TitleTools } from '../components/TitleTools'
 import type { LoadedData } from '../data/dataset'
 import type { Route } from '../data/schema'
-import { savedOverlay } from '../edit/backGuard'
+import { useInlineEditing } from '../edit/backGuard'
 import { CommunityText } from '../edit/CommunityText'
 import type { ToolScope } from '../edit/PageTools'
 import { textTarget } from '../edit/textEdits'
@@ -25,10 +25,7 @@ import { useSocial } from '../social/store'
 import { areaSectorColor, NotFound } from './AreaPage'
 
 // 編輯器只有要編輯時才載入
-const RouteTopoEditor = lazy(() => import('../topo/TopoEditor').then((m) => ({ default: m.RouteTopoEditor })))
-
-/** 手機版就地編輯的項目：說明（卡片裡）、Topo（photo：長按的那一張；從選單進入時不指定） */
-type Editing = { kind: 'text' } | { kind: 'topo'; photo?: string }
+const InlineTopoEditor = lazy(() => import('../topo/TopoEditor').then((m) => ({ default: m.InlineTopoEditor })))
 
 /**
  * 路線頁（手機版與電腦版的右側相同）：整頁是一張路線卡片。上方是標題卡（與區域、分區頁相同；右上是收藏、回報位置、更多），
@@ -48,12 +45,7 @@ export function RoutePage({ data, id, topoInList }: { data: LoadedData; id: stri
   const rating = summarize(useSocial().ratings[routeKey(id)])
   const [tickOpen, setTickOpen] = useState(false)
   const [reviews, setReviews] = useState<ReviewsSheet>()
-  // 手機就地編輯中重新載入、App 被系統關掉再回來：回到原來的編輯（記在瀏覽紀錄裡，useBackGuard）
-  const [editing, setEditing] = useState<Editing | undefined>(() => {
-    const saved = savedOverlay()
-    if (saved?.route !== id) return undefined
-    return saved.kind === 'topo' ? { kind: 'topo', photo: saved.photo } : { kind: 'text' }
-  })
+  const [editing, setEditing] = useInlineEditing(id)
   const wide = useWide()
   if (!ref) return <NotFound />
   const { route, sector, area } = ref
@@ -113,12 +105,12 @@ export function RoutePage({ data, id, topoInList }: { data: LoadedData; id: stri
         original={route.description}
         editing={editing?.kind === 'text'}
         onEdit={wide ? undefined : (on) => setEditing(on ? { kind: 'text' } : undefined)}
-        route={route.id}
+        owner={route.id}
       />
 
       {!wide && editing?.kind === 'topo' && (
         <Suspense>
-          <RouteTopoEditor data={data} sector={sector} routeId={route.id} photo={editing.photo} onClose={() => setEditing(undefined)} />
+          <InlineTopoEditor data={data} sector={sector} routeId={route.id} photo={editing.photo} owner={route.id} onClose={() => setEditing(undefined)} />
         </Suspense>
       )}
 
