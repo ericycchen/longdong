@@ -5168,6 +5168,13 @@ button.key-row:disabled {
   stroke: #c8102e;
 }
 
+.topo-hits circle {
+  /* 手指按點的範圍：比看得到的點大，自己不畫出來 */
+  fill: transparent;
+  stroke: none;
+  pointer-events: all;
+}
+
 .topo-handles circle.start {
   fill: #c8102e;
   stroke: #fff;

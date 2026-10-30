@@ -91,6 +91,8 @@ interface Draft {
   crop?: Crop
 }
 
+/** 手指按得到的範圍（半徑，螢幕像素）：比看得到的點大，不必按得很準 */
+const HIT_R = 22
 const draftKey = (photo: string) => `longdong.topoDraft.${photo}`
 
 function readDraft(photo: string): Draft | undefined {
@@ -417,62 +419,75 @@ function Editor({
       </g>
     )
 
+  /** 點、bolt 共用的拖曳事件 */
+  const grab = (target: NonNullable<typeof dragging.current>) => ({
+    onPointerDown: (e: ReactPointerEvent<SVGElement>) => startDrag(e, target),
+    onPointerMove: onDrag,
+    onPointerUp: endDrag,
+    onLostPointerCapture: endDrag,
+    onClick: (e: ReactMouseEvent) => e.stopPropagation(),
+  })
+
   const handles = (k: number) =>
     !preview &&
     mode !== 'crop' &&
     selected && (
-      <g className="topo-handles">
-        {current.line?.map((p, i) => {
-          const [x, y] = px(photo, p)
-          return (
-            <circle
-              key={`l${i}`}
-              className={[i === 0 && 'start', pickedLive?.kind === 'line' && pickedLive.index === i && 'picked'].filter(Boolean).join(' ') || undefined}
-              cx={x}
-              cy={y}
-              r={(coarse ? 13 : 6) * k}
-              strokeWidth={2 * k}
-              onPointerDown={(e) => startDrag(e, { kind: 'line', index: i, at: p })}
-              onPointerMove={onDrag}
-              onPointerUp={endDrag}
-              onLostPointerCapture={endDrag}
-              onClick={(e) => e.stopPropagation()}
-              onContextMenu={(e) => {
-                e.preventDefault()
-                edit((m) => ({ ...m, line: m.line!.filter((_, j) => j !== i) }))
-              }}
-            />
-          )
-        })}
-        {Object.entries(current.bolts ?? {}).map(([pos, p]) => {
-          const [x, y] = px(photo, p)
-          return (
-            <rect
-              key={pos}
-              className={pickedLive?.kind === 'bolt' && pickedLive.pos === pos ? 'bolt picked' : 'bolt'}
-              x={x - 32 * k}
-              y={y - (coarse ? 22 : 14) * k}
-              width={64 * k}
-              height={(coarse ? 44 : 28) * k}
-              rx={(coarse ? 22 : 14) * k}
-              strokeWidth={2 * k}
-              onPointerDown={(e) => startDrag(e, { kind: 'bolt', pos })}
-              onPointerMove={onDrag}
-              onPointerUp={endDrag}
-              onLostPointerCapture={endDrag}
-              onClick={(e) => e.stopPropagation()}
-              onContextMenu={(e) => {
-                e.preventDefault()
-                edit((m) => {
-                  const bolts = { ...m.bolts }
-                  delete bolts[pos]
-                  return { ...m, bolts }
-                })
-              }}
-            />
-          )
-        })}
-      </g>
+      <>
+        <g className="topo-handles">
+          {current.line?.map((p, i) => {
+            const [x, y] = px(photo, p)
+            return (
+              <circle
+                key={`l${i}`}
+                className={[i === 0 && 'start', pickedLive?.kind === 'line' && pickedLive.index === i && 'picked'].filter(Boolean).join(' ') || undefined}
+                cx={x}
+                cy={y}
+                r={(coarse ? 13 : 6) * k}
+                strokeWidth={2 * k}
+                // 手指：按下的是外面那圈透明的 .topo-hits（比看得到的點大）
+                pointerEvents={coarse ? 'none' : undefined}
+                {...(coarse ? {} : grab({ kind: 'line', index: i, at: p }))}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  edit((m) => ({ ...m, line: m.line!.filter((_, j) => j !== i) }))
+                }}
+              />
+            )
+          })}
+          {Object.entries(current.bolts ?? {}).map(([pos, p]) => {
+            const [x, y] = px(photo, p)
+            return (
+              <rect
+                key={pos}
+                className={pickedLive?.kind === 'bolt' && pickedLive.pos === pos ? 'bolt picked' : 'bolt'}
+                x={x - 32 * k}
+                y={y - (coarse ? 22 : 14) * k}
+                width={64 * k}
+                height={(coarse ? 44 : 28) * k}
+                rx={(coarse ? 22 : 14) * k}
+                strokeWidth={2 * k}
+                {...grab({ kind: 'bolt', pos })}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  edit((m) => {
+                    const bolts = { ...m.bolts }
+                    delete bolts[pos]
+                    return { ...m, bolts }
+                  })
+                }}
+              />
+            )
+          })}
+        </g>
+        {coarse && (
+          <g className="topo-hits">
+            {current.line?.map((p, i) => {
+              const [x, y] = px(photo, p)
+              return <circle key={`h${i}`} cx={x} cy={y} r={HIT_R * k} {...grab({ kind: 'line', index: i, at: p })} />
+            })}
+          </g>
+        )}
+      </>
     )
 
   /** 工具列的一顆按鈕：文字與快捷鍵（滑過去也顯示） */

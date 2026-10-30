@@ -555,6 +555,11 @@ try {
   check('手機：點一下把手就選取它（不會多一個點）', (await phone.page.locator('.topo-handles circle.picked').count()) === 1 && (await phoneHandles().count()) === 3 && !(await deleteTool.isDisabled()))
   await deleteTool.click()
   check('手機：「刪除這個點」刪掉選取的點', (await phoneHandles().count()) === 2 && (await deleteTool.isDisabled()))
+  // 按在點旁邊（看得到的點之外、觸控範圍之內）也算按到它：選取，不多出一個點
+  const near = await centerOf(0)
+  await phone.page.touchscreen.tap(near.x + 30, near.y)
+  await phone.page.waitForTimeout(400)
+  check('手機：按在點旁邊 30 像素（看得到的點之外；瀏覽器自己就會多算十幾像素）也選到這個點，不多一個點', (await phone.page.locator('.topo-handles circle.picked').count()) === 1 && (await phoneHandles().count()) === 2, `${await phoneHandles().count()} 個點`)
   // 雙指捏合：縮放，不多出一個點
   const zoomText = () => phone.page.locator('.topo-zoom-fit').textContent()
   pb = await phoneFrame()
@@ -574,6 +579,20 @@ try {
   await touch('touchEnd', [])
   await phone.page.waitForTimeout(200)
   check('手機：放大後單指拖曳空白處，照片平移，不多出一個點', (await innerNow()) !== panBefore && (await phoneHandles().count()) === 2)
+  // 平移之後遲到的 click（不論多晚）都不當作點了一下；下一次真的點一下照樣加一個點
+  await phone.page.waitForTimeout(400)
+  await phone.page.evaluate(`(() => {
+    const r = document.querySelector('.topo-frame svg').getBoundingClientRect()
+    document.querySelector('.topo-frame svg').dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1, clientX: r.left + r.width * 0.7, clientY: r.top + r.height * 0.3 }))
+  })()`)
+  check('手機：平移之後很晚才來的 click 不會多出一個點', (await phoneHandles().count()) === 2, `${await phoneHandles().count()} 個點`)
+  const paneBox = (await phone.page.locator('.topo-zoom').boundingBox())!
+  const emptySpot = { x: paneBox.x + paneBox.width * 0.6, y: paneBox.y + paneBox.height * 0.4 }
+  await phone.page.touchscreen.tap(emptySpot.x, emptySpot.y)
+  await phone.page.waitForTimeout(300)
+  await phone.page.touchscreen.tap(emptySpot.x, emptySpot.y)
+  await phone.page.waitForTimeout(300)
+  check('手機：平移之後，下一次真的點一下照樣加一個點', (await phoneHandles().count()) === 3, `${await phoneHandles().count()} 個點`)
   await phone.page.screenshot({ path: process.env.PHONE_SHOT ?? 'dist-e2e/phone.png' })
   // 手機的目錄：分區下有「新增 Topo 照片」（手機也能上傳）
   await phone.page.goto(base + 'edit')

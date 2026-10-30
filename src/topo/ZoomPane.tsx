@@ -8,8 +8,6 @@ const STEP = 1.5
 const DRAG_PX = 5
 /** 編輯用：在照片上按住不動超過這個時間（毫秒），接著拖曳就是平移 */
 const LONG_PRESS_MS = 350
-/** 平移結束後，放開滑鼠緊接著的那一次點擊要擋掉；過了這個時間還沒有點擊就不擋了（避免擋到之後真正的點擊） */
-const CLICK_GUARD_MS = 80
 
 /**
  * 編輯用的縮放區（電腦版）：滾輪或 +／- 縮放（以游標位置為中心）、0 回到整張；
@@ -32,6 +30,7 @@ export function ZoomPane({ children, viewing }: { children: (zoom: number) => Re
   const hover = useRef(false)
   /** 左鍵按下的位置；移動超過 DRAG_PX 才算拖曳（觀看時開始平移），之後放開時擋掉那一次點擊 */
   const press = useRef<Pt | null>(null)
+  /** 這一輪按下到放開之間平移、拖曳或捏合過：放開後的那一次點擊要擋掉；下一次按下（第二根手指除外）才重新算 */
   const dragged = useRef(false)
   /** 編輯用：按住不動的計時；時間到之後（long）拖曳就是平移 */
   const longTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -108,7 +107,10 @@ export function ZoomPane({ children, viewing }: { children: (zoom: number) => Re
   const startPan = (e: ReactPointerEvent) => {
     // 控制按鈕自己要能按（包括關掉「移動」）
     if ((e.target as Element).closest('.topo-zoom-controls')) return
-    onHandle.current = !!(e.target as Element).closest('.topo-handles, .topo-fork, .topo-crop')
+    // 第一根手指就是新的一輪（上一輪漏收的放開不留著）
+    if (e.pointerType === 'touch' && e.isPrimary) touches.current.clear()
+    if (!(e.pointerType === 'touch' && touches.current.size > 0)) dragged.current = false
+    onHandle.current = !!(e.target as Element).closest('.topo-handles, .topo-hits, .topo-fork, .topo-crop')
     if (e.pointerType === 'touch' && !viewing) {
       touches.current.set(e.pointerId, rel(e))
       if (touches.current.size >= 2) {
@@ -123,14 +125,11 @@ export function ZoomPane({ children, viewing }: { children: (zoom: number) => Re
         return
       }
     }
-    if (e.button === 0) {
-      press.current = rel(e)
-      dragged.current = false
-    }
+    if (e.button === 0) press.current = rel(e)
     if (viewing && e.button === 0) return
     if (e.button !== 1 && !(e.button === 0 && (space || hand))) {
       // 編輯：照片上按住不動一下，接著拖曳就是平移（點、把手、裁切框、分岔點自己要能拖，不算）
-      if (e.button === 0 && !(e.target as Element).closest('.topo-handles, .topo-fork, .topo-crop')) {
+      if (e.button === 0 && !(e.target as Element).closest('.topo-handles, .topo-hits, .topo-fork, .topo-crop')) {
         clearTimeout(longTimer.current)
         longTimer.current = setTimeout(() => {
           armed.current = true
@@ -181,12 +180,11 @@ export function ZoomPane({ children, viewing }: { children: (zoom: number) => Re
     if (armed.current) dragged.current = true
     armed.current = false
     setLong(false)
-    // 放開之後緊接著會有一次 click：擋掉；之後沒有 click 的話不再擋
-    if (dragged.current) setTimeout(() => (dragged.current = false), CLICK_GUARD_MS)
   }
   // 平移、拖曳之後放開，不要當作點了一下（多出一個點、選到路線）
+  // 不靠計時：旗標留到下一次按下才清，click 多晚到都擋得住；沒有 click 也不會擋到之後的（鍵盤觸發的 click 不擋）
   const stopClick = (e: ReactMouseEvent) => {
-    if (!dragged.current) return
+    if (!dragged.current || e.detail === 0) return
     dragged.current = false
     e.stopPropagation()
     e.preventDefault()
