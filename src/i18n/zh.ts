@@ -390,6 +390,7 @@ export const zh = {
   'route.actionsMore': '更多',
   'route.anchorHardware': 'Anchor 配件',
   'route.installedOn': '{date} 安裝',
+  'route.info': '路線資料',
   'route.notes': '備註',
   'route.feel': '體感{feel}',
   'bolt.position': '位置',

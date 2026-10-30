@@ -396,6 +396,7 @@ export const ja: Messages = {
   'route.actionsMore': 'その他',
   'route.anchorHardware': '終了点の部品',
   'route.installedOn': '{date} 設置',
+  'route.info': 'ルート情報',
   'route.notes': '備考',
   'route.feel': '体感 {feel}',
   'bolt.position': '位置',

@@ -681,6 +681,7 @@ try {
   const routeMap = (await vp.locator('.route-m .area-hero svg.area-hero-shape').boundingBox())!
   const routeFill = Math.max(routeWall.width / routeMap.width, routeWall.height / routeMap.height)
   check('手機路線頁：岩壁放到最大（至少佔地圖的六成）', routeFill >= 0.6, `${(routeFill * 100).toFixed(0)}%`)
+  check('Topo 直接放在卡片裡：沒有「Topo」標題、沒有分隔線', (await vp.locator('.route-m .topos h2').count()) === 0 && (await vp.locator('.route-m .topos').evaluate((el) => getComputedStyle(el).borderTopWidth)) === '0px')
   const topoY = (await vp.locator('.route-m .topo').boundingBox())!.y
   const heroBottom = await vp.locator('.route-m .area-hero').evaluate((el) => el.getBoundingClientRect().bottom)
   check('手機路線頁：Topo 在標題卡下面', topoY > heroBottom, `${topoY} / ${heroBottom}`)
@@ -1104,11 +1105,20 @@ try {
   // 路線卡片：難度、長度、快扣、種類在標題卡裡；說明沒有標題；路線資料一行一項，Bolt 只有摘要，明細點了才展開
   check('難度、長度、快扣、種類在標題卡裡（卡片外沒有另一列）', (await rp.locator('.area-hero .route-facts .route-grade').count()) === 1 && (await rp.locator('.route-facts').count()) === 1)
   check('路線頁的難度沒有難度底色', (await rp.locator('.route-facts .grade-pill').count()) === 0 && (await rp.locator('.route-facts .route-grade').evaluate((el) => getComputedStyle(el).backgroundColor)) === 'rgba(0, 0, 0, 0)')
-  // 手機：安全與拉測、首攀在「更多」選單上方，不在卡片裡
-  check('手機：卡片裡沒有安全與拉測、首攀', !(await rp.locator('.route-data > .route-data-row .route-data-label').allTextContents()).some((l) => l === '安全與拉測' || l === '首攀'))
-  await rp.locator('.area-hero-wrap .tool-button[aria-haspopup="menu"]').click()
-  check('手機：「更多」選單上方有安全與拉測', ((await rp.locator('.tool-pop-info').textContent()) ?? '').includes('最近拉測'))
-  await rp.locator('.area-hero-wrap .tool-button[aria-haspopup="menu"]').click()
+  // 說明以外的資料（安全與拉測、首攀、備註、Bolt）整份收在說明下面，只有一個 ⓘ 按鈕
+  const infoButton = rp.locator('.route-info-button')
+  const afterText = await rp.evaluate(`(() => { const a = document.querySelector('.route-m .community-text'), b = document.querySelector('.route-m .route-info'); return !!b && (!a || !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)) })()`)
+  check('路線資料在說明下面，預設收起（只有 ⓘ 按鈕，沒有文字）', afterText === true && (await rp.locator('.route-info .route-data').count()) === 0 && ((await rp.locator('.route-info').textContent()) ?? '').trim() === '')
+  check('「更多」選單沒有路線資料', (await rp.locator('.tool-pop-info').count()) === 0)
+  await infoButton.click()
+  const infoLabels = await rp.locator('.route-info .route-data-label').allTextContents()
+  check('點 ⓘ：展開安全與拉測、Bolt（同一份）', infoLabels.includes('安全與拉測') && infoLabels.includes('Bolt') && ((await rp.locator('.route-info').textContent()) ?? '').includes('最近拉測'), infoLabels.join())
+  // 一整張卡片：標題卡沒有自己的底色與圓角、卡片裡沒有水平分隔線
+  check('卡片沒有斷裂：標題卡透明、各段沒有水平分隔線', (await rp.locator('.route-m .area-hero').evaluate((el) => getComputedStyle(el).backgroundColor)) === 'rgba(0, 0, 0, 0)' && (await rp.locator('.route-m .route-block').evaluateAll((els) => els.every((el) => getComputedStyle(el).borderTopWidth === '0px'))))
+  // 沒有任何評分：星星和留言圖示一樣是白色（不是星星色）
+  const starColor = await rp.locator('.reviews-icon.rating svg').evaluate((el) => getComputedStyle(el).color)
+  const commentColor = await rp.locator('.reviews-icon.comments svg').evaluate((el) => getComputedStyle(el).color)
+  check('沒有任何評分：星星是白色', (await rp.locator('.reviews-icon.rating.rated').count()) === 0 && starColor === commentColor, `${starColor} / ${commentColor}`)
   check('Bolt 只有摘要（幾支 bolt）、明細收起來', ((await rp.locator('.route-bolts summary').textContent()) ?? '').includes('支 bolt') && !(await rp.locator('.route-bolts table.bolts').isVisible()))
   await rp.locator('.route-bolts summary').click()
   const boltTable = (await rp.locator('.route-bolts table.bolts').boundingBox())!

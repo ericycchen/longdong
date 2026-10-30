@@ -5473,19 +5473,84 @@ html {
 }
 
 /* 路線頁：整頁是一張路線卡片，上方是標題卡（上面兩角圓、下面直角接著內容） */
+/*
+ * 一整張卡片：區域色從上方（標題卡）往下漸漸淡成卡片底色，沒有接縫；左邊的區域色條貫穿整張卡片；
+ * 卡片裡的各段之間只用間距分開，不畫水平分隔線
+ */
 [data-layout] .route-m {
+  position: relative;
   margin: 0 0 16px;
-  padding: 0 16px 16px;
+  padding: 0 16px 18px 20px;
   border-radius: 20px;
-  background: var(--surface);
+  background:
+    linear-gradient(to bottom, color-mix(in srgb, var(--area-color) 14%, var(--surface)) 150px, var(--surface) 340px),
+    var(--surface);
+  overflow: hidden;
+}
+
+[data-layout] .route-m::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  background: var(--area-color);
 }
 
 [data-layout] .route-m > .area-hero-wrap {
-  margin: 0 -16px 14px;
+  margin: 0 -16px 4px -20px;
 }
 
 [data-layout] .route-m .area-hero {
-  border-radius: 20px 20px 0 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+[data-layout] .route-m .area-hero::before {
+  display: none;
+}
+
+/* 標題卡的地圖下緣也淡出，接到卡片下半段不會有一條邊 */
+[data-layout] .route-m .area-hero > .area-hero-shape.hero-map {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 22%), linear-gradient(to bottom, #000 55%, transparent);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to right, transparent, #000 22%), linear-gradient(to bottom, #000 55%, transparent);
+  mask-composite: intersect;
+}
+
+[data-layout] .route-m .route-block {
+  margin-top: 18px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+/* 路線資料：收起來時只有 ⓘ 按鈕，點了在上面展開 */
+.route-info {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
+
+.route-info > .route-data {
+  justify-self: stretch;
+}
+
+.route-info-button {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin: -8px 0 -8px -9px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.route-info-button[aria-expanded='true'] {
+  color: var(--text);
 }
 
 /* 彈窗（Sheet.tsx）：手機從下方滑出、電腦置中 */
@@ -5566,7 +5631,8 @@ html {
   cursor: pointer;
 }
 
-.reviews-icon.rating svg {
+/* 有人評分才是星星色；沒有任何評分時和留言圖示一樣是白色 */
+.reviews-icon.rating.rated svg {
   color: var(--star);
 }
 
@@ -5590,15 +5656,3 @@ html {
   font-variant-numeric: tabular-nums;
 }
 
-/* 手機的「更多」選單上方：安全與拉測、首攀 */
-.tool-pop-info {
-  display: grid;
-  gap: 8px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-  font-size: 0.9rem;
-}
-
-.tool-pop-info .route-data-row {
-  grid-template-columns: 5rem minmax(0, 1fr);
-}

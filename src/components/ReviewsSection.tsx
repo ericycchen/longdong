@@ -113,7 +113,7 @@ export function ReviewsBar({
     <div className="reviews-bar">
       <div className="reviews-bar-icons">
         {rateable && (
-          <button type="button" className="reviews-icon rating" aria-label={t('rating.title')} onClick={() => onSheet('rating')}>
+          <button type="button" className={`reviews-icon rating${summary ? ' rated' : ''}`} aria-label={t('rating.title')} onClick={() => onSheet('rating')}>
             <StarIcon on={!!summary} />
             {summary && <span>{summary.average.toFixed(1)}</span>}
           </button>

@@ -392,6 +392,7 @@ export const en: Messages = {
   'route.actionsMore': 'More',
   'route.anchorHardware': 'Anchor hardware',
   'route.installedOn': 'installed {date}',
+  'route.info': 'Route info',
   'route.notes': 'Notes',
   'route.feel': 'feels {feel}',
   'bolt.position': 'Position',

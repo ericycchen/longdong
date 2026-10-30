@@ -70,7 +70,7 @@ export function SectorTopos({ sector }: { sector: Sector }) {
 }
 
 /**
- * 路線頁：有標記這條路線的 Topo，這條用亮色並標出 bolt。
+ * 路線頁：有標記這條路線的 Topo（直接放在卡片裡，沒有標題），這條用亮色並標出 bolt。
  * 手機版（editable）：點照片開全螢幕，長按進入這張照片的編輯；沒有 Topo 時整段不顯示。
  */
 export function RouteTopos({ sector, routeId, editable }: { sector: Sector; routeId: string; editable?: boolean }) {
@@ -81,8 +81,7 @@ export function RouteTopos({ sector, routeId, editable }: { sector: Sector; rout
   const labels = routeLabels(sector)
   const info = routeInfo(sector.routes, (r) => localName(r.name, lang).main)
   return (
-    <section className="route-block topos">
-      <h2>{t('topo.title')}</h2>
+    <section className="route-block topos" aria-label={t('topo.title')}>
       {topos.map((topo) => (
         <EditableFigure key={topo.photo.id} to={editable ? href.topo(topo.photo.id) : undefined}>
           <Photo
