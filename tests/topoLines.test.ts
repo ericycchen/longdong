@@ -19,10 +19,39 @@ const render = (k: number, extra: object = {}) => renderToStaticMarkup(createEle
 const count = (html: string, re: RegExp) => (html.match(re) ?? []).length
 
 describe('Topo 標記的自動排版（畫面上的大小）', () => {
-  it('solo（路線卡片）：只標選到的路線的編號與說明，其他路線只畫線、變淡', () => {
+  it('看的時候標出起點（實心）與終點（空心）；編輯時不畫終點', () => {
+    expect(count(render(1), /class="topo-start"/g)).toBe(2)
+    expect(count(render(1), /class="topo-end"/g)).toBe(2)
+    expect(render(1)).toContain('class="topo-end" cx="600" cy="100"')
+    expect(count(render(1, { editing: true }), /class="topo-end"/g)).toBe(0)
+  })
+
+  it('solo：說明不避開其他路線的線，貼在編號旁邊', () => {
+    const near: Marks = {
+      a: { line: [[3000, 9000], [3000, 1000]] },
+      b: { line: [[3150, 9000], [3150, 1000]] },
+    }
+    const nums = (s: string) => s.match(/-?\d+(\.\d+)?/g)!.map(Number)
+    const side = (html: string) => {
+      const badge = html.match(/<g class="topo-badge"><rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"/)!
+      const [x, y, w, h] = nums(badge.slice(1).join(' '))
+      const spans = [...html.matchAll(/<tspan x="([\d.]+)" y="([\d.]+)"/g)].map((m) => [Number(m[1]), Number(m[2])])
+      const midY = spans.reduce((s, [, sy]) => s + sy, 0) / spans.length
+      // 說明在編號的右邊或左邊、同一高度
+      return Math.abs(midY - (y + h / 2)) < 1 && spans.every(([sx]) => sx > x + w || sx < x)
+    }
+    const html = (solo: boolean) => renderToStaticMarkup(createElement('svg', null, createElement(TopoLines, { photo, marks: near, labels, k: 1, info, highlight: 'a', solo })))
+    expect(side(html(true))).toBe(true)
+    expect(side(html(false))).toBe(false)
+  })
+
+  it('solo（路線卡片）：選到的路線標編號與說明，其他路線只標小的編號、變淡', () => {
     const html = render(0.5, { highlight: 'a', solo: true })
-    expect(html).toContain('>10<')
-    expect(html).not.toContain('>11<')
+    expect(html).toContain('<g class="topo-badge">')
+    expect(html).toMatch(/<g class="topo-badge small">.*>11</)
+    // 其他路線的編號在線的下段（起點附近），畫面中間留給主角
+    const small = html.match(/<g class="topo-badge small"><rect x="[\d.]+" y="([\d.]+)" width="[\d.]+" height="([\d.]+)"/)!
+    expect(Number(small[1]) + Number(small[2]) / 2).toBeGreaterThan(photo.height * 0.7)
     expect(html).toContain('路線甲')
     expect(html).not.toContain('路線乙')
     expect(count(html, /topo-route kind-other dim/g)).toBeGreaterThan(0)

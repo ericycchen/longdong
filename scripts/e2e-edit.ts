@@ -992,7 +992,7 @@ try {
     const img = f.querySelector<HTMLImageElement>('.topo-frame > img')!
     return {
       buttons: f.querySelectorAll('button').length,
-      badges: [...f.querySelectorAll('.topo-badge text')].map((t) => t.textContent),
+      badges: [...f.querySelectorAll('.topo-badge:not(.small) text')].map((t) => t.textContent),
       gray: getComputedStyle(img).filter.includes('grayscale'),
       edge: getComputedStyle(f.querySelector('.topo-frame')!, '::after').boxShadow,
       fade: getComputedStyle(f.querySelector('.topo-frame')!).maskImage,
@@ -1002,7 +1002,7 @@ try {
     }
   })
   check(
-    '手機路線卡片：Topo 上沒有按鈕，只標這條路線的編號',
+    '手機路線卡片：Topo 上沒有按鈕，只有這條路線是大的編號',
     cardState.buttons === 0 && cardState.badges.join(',') === topoRoutes[0].number,
     JSON.stringify(cardState),
   )

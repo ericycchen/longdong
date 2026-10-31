@@ -121,6 +121,9 @@ const NOTE_FONT_BASE = 10
 const NOTE_LINE_BASE = 12.5
 /** 電腦版（寬螢幕）螢幕大、離得遠，牌子與字放大一點；手機維持原樣 */
 const uiScale = () => (typeof window !== 'undefined' && window.matchMedia?.('(min-width: 900px)').matches ? 1.5 : 1)
+/** solo 時其他路線的編號牌縮成這個比例，放在線的下段（靠近起點；畫面中間留給主角） */
+const SMALL_PILL = 0.8
+const SMALL_SPOTS = [0.14, 0.22, 0.08, 0.3]
 /** 線在畫面上至少這麼長（螢幕像素）才標編號；選到的路線不受限 */
 const MIN_LABEL_LINE_PX = 40
 /** 線在畫面上這麼長才多顯示難度、再長才多顯示名稱；選到的路線一律顯示 */
@@ -135,6 +138,8 @@ const WRAP_PX = [90, 60]
 
 interface Plan {
   pill?: Box
+  /** solo 時其他路線的編號：小一點、最後才放（不擠到主角） */
+  small?: boolean
   note?: { box: Box; lines: string[] }
   bolts: { pos: string; at: Pt; anchor: boolean; label: string; pill: Box; note?: { box: Box; lines: string[] } }[]
 }
@@ -146,7 +151,7 @@ interface Plan {
  * highlight 的路線用亮色、其他變淡；bolts 決定畫哪些路線的 bolt 與 anchor（預設只畫 highlight 的）；
  * 有 link 時點線段換到那條路線。兩條路線共用的線段只畫一次。
  * editing（編輯時）：線畫細一點、不顯示難度名稱等說明；牌子避開 highlight 路線的點（點上有把手），放不下就不顯示。
- * solo（路線卡片）：只標 highlight 的編號與說明，其他路線只畫線。
+ * solo（路線卡片）：highlight 標編號與說明（不避開其他路線的線，貼著編號放）；其他路線只標小的編號，最後才放，放不下就不標。
  */
 export function TopoLines({
   photo,
@@ -199,7 +204,8 @@ export function TopoLines({
   const placer = new Placer(
     { x: bx, y: by, w: bw, h: bh },
     3 * k,
-    drawn.map(([, line]) => line),
+    // solo：其他路線只是淡淡的背景，說明可以壓在上面，貼著編號放
+    drawn.filter(([id]) => !solo || id === highlight).map(([, line]) => line),
   )
   if (editing && highlight) {
     const r = EDIT_POINT_PX * k
@@ -222,29 +228,33 @@ export function TopoLines({
       if (pill) plan.get(id)!.bolts.push({ pos, at, anchor, label, pill })
     }
   }
-  // 2. 路線編號牌
-  for (const id of priority) {
+  // 2. 路線編號牌（solo 時其他路線的編號在說明之後才放，見 4.）
+  const placePill = (id: string, small: boolean) => {
     const text = labels.get(id)
-    if (!text || (solo && id !== highlight)) continue
+    if (!text) return
+    const f = small ? SMALL_PILL : 1
     const line = lineOf(id)
-    const w = (textWidth(text, PILL_FONT) + 14) * k
-    const h = PILL_H * k
+    const w = (textWidth(text, PILL_FONT * f) + 14 * f) * k
+    const h = PILL_H * f * k
     let spots: Box[]
     if (line && line.length >= 2) {
-      if (id !== highlight && length.get(id)! < MIN_LABEL_LINE_PX) continue
+      if (id !== highlight && length.get(id)! < MIN_LABEL_LINE_PX) return
       const on = labelLine(id, line)
-      const along = LABEL_SPOTS.map((f) => pointAlong(on, f))
+      const along = (small ? SMALL_SPOTS : LABEL_SPOTS).map((f) => pointAlong(on, f))
       spots = along.map((p) => centeredBox(p, w, h))
       // 選到的路線一定要標：線上都沒空位時放在線的旁邊
       if (id === highlight) spots.push(...along.flatMap(([x, y]) => [centeredBox([x + w / 2 + h / 2, y], w, h), centeredBox([x - w / 2 - h / 2, y], w, h)]))
     } else {
       // 沒有線段：標在最下面的 bolt 旁邊
       const low = lowestBolt(photo, marks[id].bolts)
-      if (!low) continue
+      if (!low) return
       spots = [centeredBox([low[0], low[1] + h], w, h), centeredBox([low[0], low[1] - h], w, h)]
     }
-    plan.get(id)!.pill = placer.place(spots, id === highlight && !editing)
+    const entry = plan.get(id)!
+    entry.pill = placer.place(spots, id === highlight && !editing)
+    entry.small = small
   }
+  for (const id of priority) if (!solo || id === highlight) placePill(id, false)
   // 3. 多的說明：編號牌下面的難度與名稱、bolt 旁邊的材質與年份（空間夠才顯示）
   for (const id of editing ? [] : priority) {
     const entry = plan.get(id)!
@@ -316,6 +326,9 @@ export function TopoLines({
     }
   }
 
+  // 4. solo：其他路線的編號（小、淡），放得下才標，不帶說明
+  if (solo && !editing) for (const id of priority) if (id !== highlight) placePill(id, true)
+
   // SVG 的 <a> 的 href 不是字串，站內換頁攔不到（router.ts），改用點擊與 Enter 換頁
   const pick = onPick ?? (link && ((id: string) => navigate(link(id))))
   // 沒有路線資料（kind 不明）時用紅色
@@ -327,6 +340,8 @@ export function TopoLines({
       {ids.map((id) => {
         const line = lineOf(id)
         const start = line?.[0]
+        // 終點（看的時候）：空心圓圈，和實心的起點分得出來；編輯時每個點都有把手，不另外畫
+        const end = !editing && line && line.length >= 2 ? line[line.length - 1] : undefined
         const on = id === highlight
         const cls = clsOf(id)
         const body = (
@@ -341,7 +356,8 @@ export function TopoLines({
                 </g>
               )
             })}
-            {start && !(editing && on) && <circle className="topo-start" cx={start[0]} cy={start[1]} r={(editing ? 3 : on ? 5.5 : 4.5) * k} strokeWidth={(editing ? 1 : 1.5) * k} />}
+            {start && !(editing && on) && <circle className="topo-start" cx={start[0]} cy={start[1]} r={(editing ? 3 : on ? 4 : 3.2) * k} strokeWidth={(editing ? 1 : 1.5) * k} />}
+            {end && <circle className="topo-end" cx={end[0]} cy={end[1]} r={(on ? 3.6 : 3) * k} strokeWidth={(on ? 1.8 : 1.4) * k} />}
           </>
         )
         return pick ? (
@@ -386,9 +402,9 @@ export function TopoLines({
               </g>
             ))}
             {p.pill && labels.get(id) && (
-              <g className="topo-badge">
+              <g className={`topo-badge${p.small ? ' small' : ''}`}>
                 <rect x={p.pill.x} y={p.pill.y} width={p.pill.w} height={p.pill.h} rx={p.pill.h / 2} strokeWidth={1.5 * k} />
-                <text x={p.pill.x + p.pill.w / 2} y={p.pill.y + p.pill.h / 2} fontSize={PILL_FONT * k} dominantBaseline="central" textAnchor="middle">
+                <text x={p.pill.x + p.pill.w / 2} y={p.pill.y + p.pill.h / 2} fontSize={PILL_FONT * (p.small ? SMALL_PILL : 1) * k} dominantBaseline="central" textAnchor="middle">
                   {labels.get(id)}
                 </text>
               </g>

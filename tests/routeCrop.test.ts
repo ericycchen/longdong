@@ -40,10 +40,38 @@ describe('routeCrop', () => {
     expect(c.h).toBeGreaterThanOrEqual(Math.floor(FULL_CROP.h / 2.2) - 1)
   })
 
-  it('靠邊的路線：不超出照片的裁切範圍', () => {
+  it('靠邊的路線：裁掉另一邊，路線在畫面中間，不超出照片的裁切範圍', () => {
     const base = { x: 1000, y: 1000, w: 8000, h: 8000 }
-    const c = routeCrop(photo, base, { line: [[1100, 8900], [1200, 7000]] })
+    const line: [number, number][] = [
+      [1600, 8000],
+      [1700, 5000],
+      [1800, 2000],
+    ]
+    const c = routeCrop(photo, base, { line })
     expect(inside(c, base)).toBe(true)
+    expect(Math.abs(c.x + c.w / 2 - 1700)).toBeLessThan(30)
+    for (const [x, y] of line) {
+      expect(x).toBeGreaterThan(c.x)
+      expect(x).toBeLessThan(c.x + c.w)
+      expect(y).toBeGreaterThan(c.y)
+      expect(y).toBeLessThan(c.y + c.h)
+    }
+  })
+
+  it('示意的線（只畫一小段、從照片邊緣出去，例如 565）：整張照片', () => {
+    const base = { x: 2176, y: 0, w: 5427, h: 7459 }
+    const sketch = { line: [[3001, 7403], [3217, 7005], [3280, 6775], [3354, 6570]] as [number, number][] }
+    expect(routeCrop({ width: 2560, height: 1711 }, base, sketch)).toEqual(base)
+  })
+
+  it('騙人的牆 566（代溝）：放大並置中', () => {
+    const base = { x: 2176, y: 0, w: 5427, h: 7459 }
+    const line: [number, number][] = [[3766, 7217], [3841, 6129], [3965, 5557], [4045, 5016], [4212, 4305], [4133, 3539], [4336, 2747], [4605, 2382]]
+    const bolts = { A01: [4588, 2225], B01: [3335, 6427] } as Record<string, [number, number]>
+    const c = routeCrop({ width: 2560, height: 1711 }, base, { line, bolts })
+    expect(c.w).toBeLessThan(base.w)
+    const xs = [...line, ...Object.values(bolts)].map(([x]) => x)
+    expect(Math.abs(c.x + c.w / 2 - (Math.min(...xs) + Math.max(...xs)) / 2)).toBeLessThan(60)
   })
 })
 
