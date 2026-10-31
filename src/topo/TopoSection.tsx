@@ -2,7 +2,6 @@ import { useState, type KeyboardEvent, type ReactNode } from 'react'
 import type { Sector } from '../data/schema'
 import { localName, useLang } from '../i18n'
 import { useWide } from '../layout'
-import { useLongPress } from '../edit/useLongPress'
 import { useRouteLink } from '../router'
 import { fillShared } from './lines'
 import { FULL_CROP } from './model'
@@ -32,19 +31,24 @@ function Photo({ topo, alt, render }: { topo: SectorTopo; alt: string; render: (
   return wide ? <ZoomPane viewing>{frame}</ZoomPane> : frame(1)
 }
 
-/** 分區頁：這個分區的所有 Topo，點線段換到那條路線；手機版（onEdit）長按照片在這一頁編輯 */
+/**
+ * 分區頁：這個分區的所有 Topo。電腦版點線段換到那條路線；
+ * 手機版照片上沒有按鈕，點照片開全螢幕（onEdit：全螢幕裡的「編輯」在這一頁編輯那一張）。
+ */
 export function SectorTopos({ sector, onEdit }: { sector: Sector; onEdit?: (photo: string) => void }) {
   const { lang, t } = useLang()
+  const wide = useWide()
   const topos = useSectorTopos(sector.id)
   const { link, selected } = useRouteLink()
   const [showBolts] = useShowBolts()
+  const [open, setOpen] = useState<SectorTopo>()
   if (!topos || topos.length === 0) return null
   const labels = routeLabels(sector)
   const info = routeInfo(sector.routes, (r) => localName(r.name, lang).main)
   return (
     <section className="topos" aria-label={t('topo.title')}>
       {topos.map((topo) => (
-        <EditableFigure key={topo.photo.id} onEdit={onEdit && (() => onEdit(topo.photo.id))}>
+        <TopoFigure key={topo.photo.id} onOpen={wide || !topo.latest ? undefined : () => setOpen(topo)} label={t('topo.fullscreen')}>
           <Photo
             topo={topo}
             alt={t('topo.alt', { name: localName(sector.name, lang).main })}
@@ -58,15 +62,16 @@ export function SectorTopos({ sector, onEdit }: { sector: Sector; onEdit?: (phot
                   highlight={selected}
                   bolts={showBolts ? (selected ? [selected] : Object.keys(topo.latest.marks)) : []}
                   info={info}
-                  link={link}
+                  link={wide ? link : undefined}
                   crop={topo.latest.crop}
                 />
               )
             }
           />
-          {topo.latest && <FullscreenButton topo={topo} sector={sector} initial={selected} />}
-        </EditableFigure>
+          {wide && topo.latest && <FullscreenButton topo={topo} sector={sector} initial={selected} />}
+        </TopoFigure>
       ))}
+      {open && <Fullscreen topo={open} sector={sector} initial={selected} onClose={() => setOpen(undefined)} onEdit={onEdit} />}
     </section>
   )
 }
@@ -74,7 +79,7 @@ export function SectorTopos({ sector, onEdit }: { sector: Sector; onEdit?: (phot
 /**
  * 路線頁：有標記這條路線的 Topo（直接放在卡片裡，沒有標題、沒有按鈕），這條路線是唯一的主角：
  * 照片放大到這條路線附近、灰階並染上區域的顏色，只有這條路線周圍是原色；其他路線淡淡的、不標編號。
- * 點照片開全螢幕；手機版（onEdit）長按在這一頁編輯這張照片；沒有 Topo 時整段不顯示。
+ * 點照片開全螢幕；手機版（onEdit）全螢幕裡的「編輯」在這一頁編輯這張照片；沒有 Topo 時整段不顯示。
  */
 export function RouteTopos({ sector, routeId, onEdit }: { sector: Sector; routeId: string; onEdit?: (photo: string) => void }) {
   const { lang, t } = useLang()
@@ -91,7 +96,7 @@ export function RouteTopos({ sector, routeId, onEdit }: { sector: Sector; routeI
         const crop = routeCrop(topo.photo, topo.latest!.crop ?? FULL_CROP, marks[routeId])
         const line = marks[routeId]?.line
         return (
-          <EditableFigure key={topo.photo.id} className="topo route-topo" onEdit={onEdit && (() => onEdit(topo.photo.id))} onOpen={() => setOpen(topo)} label={t('topo.fullscreen')}>
+          <TopoFigure key={topo.photo.id} className="topo route-topo" onOpen={() => setOpen(topo)} label={t('topo.fullscreen')}>
             <TopoFrame photo={topo.photo} crop={crop} alt={t('topo.alt', { name: localName(sector.name, lang).main })}>
               {(k) => (
                 <>
@@ -100,31 +105,41 @@ export function RouteTopos({ sector, routeId, onEdit }: { sector: Sector; routeI
                 </>
               )}
             </TopoFrame>
-          </EditableFigure>
+          </TopoFigure>
         )
       })}
-      {open && (
-        <TopoFullscreen
-          photo={open.photo}
-          crop={open.latest!.crop}
-          marks={open.latest!.marks}
-          labels={labels}
-          routes={sector.routes}
-          initial={routeId}
-          onClose={() => setOpen(undefined)}
-        />
-      )}
+      {open && <Fullscreen topo={open} sector={sector} initial={routeId} onClose={() => setOpen(undefined)} onEdit={onEdit} />}
     </section>
   )
 }
 
-/** 一張 Topo；onEdit 有值時長按進入編輯；onOpen 有值時整張是按鈕（點了開全螢幕） */
-function EditableFigure({ onEdit, onOpen, label, className = 'topo', children }: { onEdit?: () => void; onOpen?: () => void; label?: string; className?: string; children: ReactNode }) {
-  const press = useLongPress(() => onEdit?.())
+/** 全螢幕看一張 Topo；onEdit：關掉全螢幕、在這一頁編輯這張照片 */
+function Fullscreen({ topo, sector, initial, onClose, onEdit }: { topo: SectorTopo; sector: Sector; initial?: string; onClose: () => void; onEdit?: (photo: string) => void }) {
+  return (
+    <TopoFullscreen
+      photo={topo.photo}
+      crop={topo.latest!.crop}
+      marks={topo.latest!.marks}
+      labels={routeLabels(sector)}
+      routes={sector.routes}
+      initial={initial}
+      onClose={onClose}
+      onEdit={
+        onEdit &&
+        (() => {
+          onClose()
+          onEdit(topo.photo.id)
+        })
+      }
+    />
+  )
+}
+
+/** 一張 Topo；onOpen 有值時整張是按鈕（點了開全螢幕） */
+function TopoFigure({ onOpen, label, className = 'topo', children }: { onOpen?: () => void; label?: string; className?: string; children: ReactNode }) {
   return (
     <figure
-      className={className}
-      {...(onEdit ? press : {})}
+      className={`${className}${onOpen ? ' openable' : ''}`}
       {...(onOpen && {
         role: 'button',
         tabIndex: 0,

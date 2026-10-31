@@ -4576,12 +4576,19 @@ body:has(.sim-banner) main.map:not(.shell main.map) {
   margin: 0;
 }
 
-/* 路線卡片的 Topo：灰階、染上區域的顏色，融進卡片；只有這條路線周圍是原色（RouteReveal），其他路線淡淡的。點了開全螢幕 */
-.route-topo {
+/* 點照片開全螢幕（路線卡片、手機的分區頁） */
+.topo.openable {
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
 
+.topo.openable:focus-visible {
+  outline: 2px solid var(--area-color, var(--brand));
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
+}
+
+/* 路線卡片的 Topo：灰階、染上區域的顏色，融進卡片；只有這條路線周圍是原色（RouteReveal），其他路線淡淡的 */
 .route-topo:focus-visible {
   outline: 2px solid var(--area-color, var(--brand));
   outline-offset: 3px;
@@ -4655,6 +4662,28 @@ body:has(.sim-banner) main.map:not(.shell main.map) {
 
 .topo-bolt-toggle[aria-pressed='true'] {
   background: #ff5a36;
+}
+
+/* 全螢幕（手機）：右上是關閉、bolt、編輯（明確按了才進入編輯） */
+.topo-full-edit {
+  position: absolute;
+  top: calc(8px + env(safe-area-inset-top));
+  right: 60px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  cursor: pointer;
+}
+
+.topo-bolt-toggle.full ~ .topo-full-edit {
+  right: 112px;
 }
 
 /* 全螢幕：關閉按鈕在右上角，bolt 按鈕放在它左邊 */

@@ -30,6 +30,7 @@ export function TopoFullscreen({
   routes,
   initial,
   onClose,
+  onEdit,
 }: {
   photo: TopoPhoto
   crop?: Crop
@@ -38,6 +39,8 @@ export function TopoFullscreen({
   routes: Route[]
   initial?: string
   onClose: () => void
+  /** 手機版：右上的「編輯」按鈕，在這一頁編輯這張照片 */
+  onEdit?: () => void
 }) {
   const { lang, t } = useLang()
   const wide = useWide()
@@ -177,6 +180,13 @@ export function TopoFullscreen({
               ×
             </button>
             {hasBolts && <BoltToggle className="topo-bolt-toggle full" />}
+            {onEdit && (
+              <button type="button" className="topo-full-edit" aria-label={t('tools.edit')} title={t('tools.edit')} onClick={onEdit}>
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 20l4-1L19 8l-3-3L5 16zM14 7l3 3" />
+                </svg>
+              </button>
+            )}
           </>
         )}
         <div ref={stageRef} className="topo-full-stage" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>

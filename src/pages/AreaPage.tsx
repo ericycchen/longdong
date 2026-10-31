@@ -30,7 +30,7 @@ const InlineTopoEditor = lazy(() => import('../topo/TopoEditor').then((m) => ({ 
  * 上方是標題卡（PageHero）：區域的顏色，右側是這個區域的地圖形狀。
  * 電腦版畫面寬：標題區多放英文名、難度範圍、Bolt 數、路線種類、需要注意的路線數與整區的難度分佈；
  * 分區也多放英文名、難度範圍、種類與需要注意的路線數。
- * 手機版在這一頁就地編輯（不換頁，關閉、返回都回到這一頁）：點說明在卡片裡編輯；只有一個分區時長按 Topo 編輯照片。
+ * 手機版在這一頁就地編輯（不換頁，關閉、返回都回到這一頁）：點說明在卡片裡編輯；Topo 點了開全螢幕，按全螢幕裡的「編輯」才編輯。
  */
 export function AreaPage({ data, id }: { data: LoadedData; id: string }) {
   const { lang, t } = useLang()
@@ -175,7 +175,7 @@ export function areaSectorColor(area: Area, sector: Sector): string | undefined 
   return sectorColor(area.color, area.sectors.indexOf(sector), area.sectors.length)
 }
 
-/** 分區頁：Topo 與路線清單，可排序、篩選。手機版的 Topo 在這一頁編輯（長按照片、「更多 › 編輯：Topo」；關閉、返回都回到這一頁） */
+/** 分區頁：Topo 與路線清單，可排序、篩選。手機版的 Topo 在這一頁編輯（全螢幕裡的「編輯」、「更多 › 編輯：Topo」；關閉、返回都回到這一頁） */
 export function SectorPage({ data, id }: { data: LoadedData; id: string }) {
   const { lang, t } = useLang()
   const wide = useWide()
@@ -221,7 +221,7 @@ export function SectorPage({ data, id }: { data: LoadedData; id: string }) {
   )
 }
 
-/** 分區的 Topo 與路線清單；onEditTopo（手機版）：長按 Topo 在這一頁編輯那一張 */
+/** 分區的 Topo 與路線清單；onEditTopo（手機版）：全螢幕裡按「編輯」在這一頁編輯那一張 */
 function SectorRoutes({ data, sector, onEditTopo }: { data: LoadedData; sector: Sector; onEditTopo?: (photo: string) => void }) {
   return (
     <>
