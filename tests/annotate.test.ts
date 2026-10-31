@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { centeredBox, pathLength, Placer, pointAlong, smoothPath, textWidth, type Pt } from '../src/topo/annotate'
+import { centeredBox, pathLength, Placer, pointAlong, segmentHitsBox, smoothPath, textWidth, wrapText, type Pt } from '../src/topo/annotate'
 
 const nums = (d: string) => d.match(/-?\d+(\.\d+)?/g)!.map(Number)
 
@@ -69,5 +69,22 @@ describe('牌子的自動排版', () => {
   it('文字寬度：中文一個字約一個字高，英數約 0.6', () => {
     expect(textWidth('龍洞', 10)).toBe(20)
     expect(textWidth('B01', 10)).toBeCloseTo(18)
+  })
+
+  it('換行：在空白、「·」處斷開，中文任何字之間都可以斷；「·」不放在行首行尾', () => {
+    expect(wrapText('316-TW · 2007', 10, 200)).toEqual(['316-TW · 2007'])
+    expect(wrapText('316-TW · 2007', 10, 40)).toEqual(['316-TW', '2007'])
+    expect(wrapText('一二三四五六', 10, 30)).toEqual(['一二三', '四五六'])
+  })
+
+  it('說明優先放在不壓到線的位置；都會壓到線時才壓', () => {
+    const line: Pt[] = [[50, 0], [50, 100]]
+    expect(segmentHitsBox(line[0], line[1], { x: 40, y: 40, w: 20, h: 10 })).toBe(true)
+    expect(segmentHitsBox(line[0], line[1], { x: 60, y: 40, w: 20, h: 10 })).toBe(false)
+    const placer = new Placer({ x: 0, y: 0, w: 100, h: 100 }, 0, [line])
+    const onLine = { x: 40, y: 40, w: 20, h: 10 }
+    const clear = { x: 60, y: 40, w: 20, h: 10 }
+    expect(placer.place([onLine, clear], false, true)).toBe(clear)
+    expect(placer.place([{ x: 40, y: 70, w: 20, h: 10 }], false, true)).toBeDefined()
   })
 })

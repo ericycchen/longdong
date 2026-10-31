@@ -19,8 +19,9 @@ const HANDLES: [Axis, Axis][] = [
 /**
  * 裁切框：疊在整張照片上，框外變暗；拖曳框內移動，拖曳邊或角調整大小（把手畫在框內，框貼著照片邊緣時才點得到）。
  * onChange(crop, true) 在每次拖曳開始時呼叫一次（讓呼叫端記下復原點），拖曳中是 onChange(crop)。
+ * handle：把手的大小（螢幕像素；手指要大一點）。
  */
-export function CropBox({ photo, crop, k, onChange }: { photo: TopoPhoto; crop?: Crop; k: number; onChange: (crop: Crop, start?: boolean) => void }) {
+export function CropBox({ photo, crop, k, handle = 12, onChange }: { photo: TopoPhoto; crop?: Crop; k: number; handle?: number; onChange: (crop: Crop, start?: boolean) => void }) {
   const c = crop ?? FULL_CROP
   const drag = useRef<{ axis?: [Axis, Axis]; from: Point; start: Crop } | null>(null)
   const [x, y] = px(photo, [c.x, c.y])
@@ -47,7 +48,7 @@ export function CropBox({ photo, crop, k, onChange }: { photo: TopoPhoto; crop?:
     drag.current = null
   }
 
-  const size = 12 * k
+  const size = handle * k
   return (
     <g className="topo-crop">
       <path className="topo-crop-dim" d={`M0 0H${photo.width}V${photo.height}H0Z M${x} ${y}V${y + h}H${x + w}V${y}Z`} fillRule="evenodd" />

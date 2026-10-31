@@ -10,7 +10,7 @@ import { ScaleMap } from '../map/ScaleMap'
 import { isLineTarget, loadMapShapes, sectorOf, useMapShapes, wallLabelAt, type EditTarget, type MapEditVersion } from '../map/shapes'
 import { useReportPins } from './useReportPins'
 import { useCloud, withCloud } from '../personal/sync'
-import { TOPO_ADD_PREFIX, href, navigate, type EditKind } from '../router'
+import { TOPO_ADD_PREFIX, goBack, href, navigate, type EditKind } from '../router'
 import { displayName, useSocial } from '../social/store'
 import { loadPhotos, useTopoState } from '../topo/store'
 import { TopoEditor } from '../topo/TopoEditor'
@@ -651,7 +651,7 @@ function TopoItemView({ item, data }: { item: EditItem; data: LoadedData }) {
   return (
     <>
       <section className="edit-center edit-topo">
-        <TopoEditor data={data} id={item.id} embedded side={side} onClose={() => navigate(href.edit())} />
+        <TopoEditor data={data} id={item.id} embedded side={side} onClose={() => goBack(href.edit())} />
       </section>
       <aside className="edit-panel">
         <DockHead part="panel" title={t('edit.panel')} />

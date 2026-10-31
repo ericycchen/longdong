@@ -47,9 +47,12 @@ export default defineConfig({
         // App 和完整路線資料一起預先快取，沒有訊號也能使用
         globPatterns: ['**/*.{js,css,html,svg,png,webp,json,geojson}'],
         // 路線分享頁（route/）每條路線一頁、內容同 index.html，不必預先快取：離線時由 navigateFallback 回 index.html
-        globIgnores: ['**/node_modules/**/*', 'version.json', 'route/**', 'og/**', 'map.html', 'checklist.html', 'edit.html'],
+        globIgnores: ['**/node_modules/**/*', 'version.json', 'route/**', 'area/**', 'sector/**', 'og/**', 'map.html', 'checklist.html', 'edit.html'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
-        navigateFallback: 'index.html',
+        // 首頁用「/」快取、換頁也回「/」：Firebase 的 cleanUrls 會把 /index.html 轉址到 /，
+        // 離線快取裡沒有首頁（被系統清掉、換版的空檔）時改從網路讀，轉址過的回應不能用在換頁，會出現 ERR_FAILED
+        manifestTransforms: [async (entries) => ({ manifest: entries.map((e) => (e.url === 'index.html' ? { ...e, url: '/' } : e)) })],
+        navigateFallback: '/',
         // Firebase 的保留路徑（/__/auth/handler 等，登入用）交給網路
         navigateFallbackDenylist: [/^\/__\//],
         // 評分、留言、暱稱、Topo、地圖編輯、說明修改：有網路時讀最新，離線時用最後一次讀到的

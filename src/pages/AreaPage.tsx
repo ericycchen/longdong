@@ -1,10 +1,11 @@
-import type { CSSProperties } from 'react'
+import { lazy, Suspense, type CSSProperties } from 'react'
 import type { LoadedData } from '../data/dataset'
 import type { Area, Route, Sector } from '../data/schema'
 import { AreaShape, SectorShape } from '../components/AreaShape'
 import { GradeDistribution } from '../components/Charts'
 import { PageHero } from '../components/PageHero'
 import { RouteList } from '../components/RouteList'
+import { useInlineEditing } from '../edit/backGuard'
 import { CommunityText } from '../edit/CommunityText'
 import { TitleTools } from '../components/TitleTools'
 import type { ToolScope } from '../edit/PageTools'
@@ -21,17 +22,22 @@ import { localName, useLang } from '../i18n'
 import { useWide } from '../layout'
 import { href } from '../router'
 
+// 編輯器只有要編輯時才載入
+const InlineTopoEditor = lazy(() => import('../topo/TopoEditor').then((m) => ({ default: m.InlineTopoEditor })))
+
 /**
  * 區域頁：列出分區（收藏的排在前面），點進去才看路線（只有一個分區時直接顯示路線）。
  * 上方是標題卡（PageHero）：區域的顏色，右側是這個區域的地圖形狀。
  * 電腦版畫面寬：標題區多放英文名、難度範圍、Bolt 數、路線種類、需要注意的路線數與整區的難度分佈；
  * 分區也多放英文名、難度範圍、種類與需要注意的路線數。
+ * 手機版在這一頁就地編輯（不換頁，關閉、返回都回到這一頁）：點說明在卡片裡編輯；Topo 點了開全螢幕，按全螢幕裡的「編輯」才編輯。
  */
 export function AreaPage({ data, id }: { data: LoadedData; id: string }) {
   const { lang, t } = useLang()
   const wide = useWide()
   const signedIn = useCloud().status === 'signed-in'
   const favorites = usePersonal().favorites
+  const [editing, setEditing] = useInlineEditing(id)
   const area = data.areaById.get(id)
   if (!area) return <NotFound />
   const routes = area.sectors.flatMap((s) => s.routes).filter((r) => !r.isFixture)
@@ -66,6 +72,7 @@ export function AreaPage({ data, id }: { data: LoadedData; id: string }) {
             share={{ url: siteUrl(href.area(area.id)), text: placeShareText(area, undefined, lang, t) }}
             signedIn={signedIn}
             scope={areaScope}
+            inlineEdit={wide ? undefined : { text: () => setEditing({ kind: 'text' }) }}
           />
         }
         shape={<AreaShape area={area} className="area-hero-shape" />}
@@ -88,10 +95,22 @@ export function AreaPage({ data, id }: { data: LoadedData; id: string }) {
         }
       />
 
-      <CommunityText target={textTarget.area(areaKey)} title={t('text.areaTitle')} />
+      <CommunityText
+        target={textTarget.area(areaKey)}
+        title={t('text.areaTitle')}
+        editing={editing?.kind === 'text'}
+        onEdit={wide ? undefined : (on) => setEditing(on ? { kind: 'text' } : undefined)}
+        owner={area.id}
+      />
+
+      {!wide && editing?.kind === 'topo' && area.sectors.length === 1 && (
+        <Suspense>
+          <InlineTopoEditor data={data} sector={area.sectors[0]} photo={editing.photo} owner={area.id} onClose={() => setEditing(undefined)} />
+        </Suspense>
+      )}
 
       {area.sectors.length === 1 ? (
-        <SectorRoutes data={data} sector={area.sectors[0]} />
+        <SectorRoutes data={data} sector={area.sectors[0]} onEditTopo={wide ? undefined : (photo) => setEditing({ kind: 'topo', photo })} />
       ) : (
         <ul className="area-list">
           {favoritesFirst(area.sectors, favorites).map((sector) => (
@@ -156,10 +175,12 @@ export function areaSectorColor(area: Area, sector: Sector): string | undefined 
   return sectorColor(area.color, area.sectors.indexOf(sector), area.sectors.length)
 }
 
-/** 分區頁：Topo 與路線清單，可排序、篩選 */
+/** 分區頁：Topo 與路線清單，可排序、篩選。手機版的 Topo 在這一頁編輯（全螢幕裡的「編輯」、「更多 › 編輯：Topo」；關閉、返回都回到這一頁） */
 export function SectorPage({ data, id }: { data: LoadedData; id: string }) {
   const { lang, t } = useLang()
+  const wide = useWide()
   const signedIn = useCloud().status === 'signed-in'
+  const [editing, setEditing] = useInlineEditing(id)
   const found = data.sectorById.get(id)
   if (!found) return <NotFound />
   const { sector, area } = found
@@ -184,20 +205,27 @@ export function SectorPage({ data, id }: { data: LoadedData; id: string }) {
             share={{ url: siteUrl(href.sector(sector.id)), text: placeShareText(area, sector, lang, t) }}
             signedIn={signedIn}
             scope={{ areaId: area.id, map: { target: wallTarget(sector.id), label: t('edit.sectorShapes') }, sectors: [sector], topoEdit: true }}
+            inlineEdit={wide ? undefined : { topo: () => setEditing({ kind: 'topo' }) }}
           />
         }
         shape={<SectorShape area={area} sector={sector} color={color} className="area-hero-shape" />}
         compact
       />
-      <SectorRoutes data={data} sector={sector} />
+      {!wide && editing?.kind === 'topo' && (
+        <Suspense>
+          <InlineTopoEditor data={data} sector={sector} photo={editing.photo} owner={sector.id} onClose={() => setEditing(undefined)} />
+        </Suspense>
+      )}
+      <SectorRoutes data={data} sector={sector} onEditTopo={wide ? undefined : (photo) => setEditing({ kind: 'topo', photo })} />
     </>
   )
 }
 
-function SectorRoutes({ data, sector }: { data: LoadedData; sector: Sector }) {
+/** 分區的 Topo 與路線清單；onEditTopo（手機版）：全螢幕裡按「編輯」在這一頁編輯那一張 */
+function SectorRoutes({ data, sector, onEditTopo }: { data: LoadedData; sector: Sector; onEditTopo?: (photo: string) => void }) {
   return (
     <>
-      <SectorTopos sector={sector} />
+      <SectorTopos sector={sector} onEdit={onEditTopo} />
       <RouteList items={sector.routes.map((r) => data.routeById.get(r.id)!)} defaultLabel="list.sort.number" />
     </>
   )

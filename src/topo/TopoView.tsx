@@ -1,7 +1,7 @@
-import { useLayoutEffect, useRef, useState, type ReactNode, type SVGProps } from 'react'
+import { useId, useLayoutEffect, useRef, useState, type ReactNode, type SVGProps } from 'react'
 import { navigate } from '../router'
 import type { Route } from '../data/schema'
-import { centeredBox, pathLength, Placer, pointAlong, smoothPath, textWidth, type Box, type Pt } from './annotate'
+import { centeredBox, pathLength, Placer, pointAlong, smoothPath, textWidth, wrapText, type Box, type Pt } from './annotate'
 import { drawnRuns, ownRuns } from './lines'
 import { FULL_CROP, imageUrl, SCALE, type Crop, type Marks, type Point, type TopoPhoto } from './model'
 
@@ -61,6 +61,25 @@ export function TopoFrame({
   )
 }
 
+/**
+ * 灰階底上，選到的路線周圍疊回原色的照片：沿著線一條柔邊的帶子（幾層寬窄不同的半透明線疊出來，不用模糊濾鏡，縮放、拖曳時不吃效能）。
+ * width：帶子最寬的寬度（照片像素）。
+ */
+export function RouteReveal({ photo, line, width }: { photo: TopoPhoto; line: Point[]; width: number }) {
+  const id = useId()
+  const d = smoothPath(line.map((p) => px(photo, p) as Pt))
+  return (
+    <g className="topo-reveal" aria-hidden>
+      <mask id={id} maskUnits="userSpaceOnUse" x={0} y={0} width={photo.width} height={photo.height}>
+        {[1, 0.7, 0.45].map((f) => (
+          <path key={f} d={d} fill="none" stroke="#fff" strokeOpacity={0.5} strokeWidth={width * f} strokeLinecap="round" strokeLinejoin="round" />
+        ))}
+      </mask>
+      <image href={imageUrl(photo.image)} x={0} y={0} width={photo.width} height={photo.height} mask={`url(#${id})`} />
+    </g>
+  )
+}
+
 /** 萬分比換成照片像素 */
 export function px(photo: TopoPhoto, [x, y]: Point): [number, number] {
   return [(x * photo.width) / SCALE, (y * photo.height) / SCALE]
@@ -102,18 +121,27 @@ const NOTE_FONT_BASE = 10
 const NOTE_LINE_BASE = 12.5
 /** 電腦版（寬螢幕）螢幕大、離得遠，牌子與字放大一點；手機維持原樣 */
 const uiScale = () => (typeof window !== 'undefined' && window.matchMedia?.('(min-width: 900px)').matches ? 1.5 : 1)
-/** 線在畫面上至少這麼長（螢幕像素）才標編號；選到的路線不受限 */
+/** solo 時其他路線的編號牌縮成這個比例，放在線的下段（靠近起點；畫面中間留給主角） */
+const SMALL_PILL = 0.8
+const SMALL_SPOTS = [0.14, 0.22, 0.08, 0.3]
+/** 線在畫面上比這個短（螢幕像素）的路線，編號最後才放；選到的路線不受限 */
 const MIN_LABEL_LINE_PX = 40
 /** 線在畫面上這麼長才多顯示難度、再長才多顯示名稱；選到的路線一律顯示 */
 const GRADE_LINE_PX = 110
 const NAME_LINE_PX = 240
+/** 編輯時線上的點（把手）佔的範圍（半徑，螢幕像素）：牌子不蓋在上面 */
+const EDIT_POINT_PX = 12
 /** 編號牌放在線上的候選位置（占全長的比例）：先放正中間，不行再往兩邊找 */
 const LABEL_SPOTS = [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82]
+/** 說明文字太長時換行的寬度（螢幕像素）：先試一行，再試這些寬度 */
+const WRAP_PX = [90, 60]
 
 interface Plan {
   pill?: Box
+  /** solo 時其他路線的編號：小一點、最後才放（不擠到主角） */
+  small?: boolean
   note?: { box: Box; lines: string[] }
-  bolts: { pos: string; at: Pt; anchor: boolean; label: string; pill: Box; note?: { box: Box; text: string } }[]
+  bolts: { pos: string; at: Pt; anchor: boolean; label: string; pill: Box; note?: { box: Box; lines: string[] } }[]
 }
 
 /**
@@ -122,6 +150,8 @@ interface Plan {
  * 放大、空間夠了才多顯示難度、名稱、bolt 的材質與年份。
  * highlight 的路線用亮色、其他變淡；bolts 決定畫哪些路線的 bolt 與 anchor（預設只畫 highlight 的）；
  * 有 link 時點線段換到那條路線。兩條路線共用的線段只畫一次。
+ * editing（編輯時）：線畫細一點、不顯示難度名稱等說明；牌子避開 highlight 路線的點（點上有把手），放不下就不顯示。
+ * solo（路線卡片）：highlight 標編號與說明（不避開其他路線的線，貼著編號放）；其他路線只標小的編號，最後才放，放不下就不標。
  */
 export function TopoLines({
   photo,
@@ -134,6 +164,8 @@ export function TopoLines({
   link,
   onPick,
   crop,
+  editing,
+  solo,
 }: {
   photo: TopoPhoto
   marks: Marks
@@ -148,6 +180,8 @@ export function TopoLines({
   /** 點線段時改為呼叫這個（不換頁）；優先於 link */
   onPick?: (id: string) => void
   crop?: Crop
+  editing?: boolean
+  solo?: boolean
 }) {
   const c = crop ?? FULL_CROP
   const u = uiScale()
@@ -165,75 +199,146 @@ export function TopoLines({
   /** 編號牌放的線：獨有線段中最長的一段（分岔的路線標在自己的岔線上）；整條都和別的路線共用時用整條 */
   const labelLine = (id: string, line: Pt[]): Pt[] => own.get(id)!.reduce<Pt[] | undefined>((a, b) => (!a || pathLength(b) > pathLength(a) ? b : a), undefined) ?? line
 
-  // ── 自動排版：依優先順序放牌子，放不下的藏起來 ──
-  const placer = new Placer({ x: bx, y: by, w: bw, h: bh }, 3 * k)
+  // ── 自動排版：同一張 Topo 的所有牌子、說明一起排，互不重疊；依優先順序放，放不下的藏起來 ──
+  // 位置固定的（bolt）先放，可以沿著線移動的編號牌其次，說明文字最後（換方向、換行，盡量不壓到線）
+  const placer = new Placer(
+    { x: bx, y: by, w: bw, h: bh },
+    3 * k,
+    // solo：其他路線只是淡淡的背景，說明可以壓在上面，貼著編號放
+    drawn.filter(([id]) => !solo || id === highlight).map(([, line]) => line),
+  )
+  if (editing && highlight) {
+    const r = EDIT_POINT_PX * k
+    for (const p of marks[highlight]?.line ?? []) {
+      const [x, y] = px(photo, p)
+      placer.reserve({ x: x - r, y: y - r, w: 2 * r, h: 2 * r })
+    }
+  }
   const plan = new Map<string, Plan>(priority.map((id) => [id, { bolts: [] }]))
   const length = new Map(priority.map((id) => [id, (lineOf(id) ? pathLength(lineOf(id)!) : 0) / k]))
-  // 1. 路線編號牌
-  for (const id of priority) {
-    const text = labels.get(id)
-    if (!text) continue
-    const line = lineOf(id)
-    const w = (textWidth(text, PILL_FONT) + 14) * k
-    const h = PILL_H * k
-    let spots: Box[]
-    if (line && line.length >= 2) {
-      if (id !== highlight && length.get(id)! < MIN_LABEL_LINE_PX) continue
-      const on = labelLine(id, line)
-      spots = LABEL_SPOTS.map((f) => centeredBox(pointAlong(on, f), w, h))
-    } else {
-      // 沒有線段：標在最下面的 bolt 旁邊
-      const low = lowestBolt(photo, marks[id].bolts)
-      if (!low) continue
-      spots = [centeredBox([low[0], low[1] + h], w, h), centeredBox([low[0], low[1] - h], w, h)]
-    }
-    plan.get(id)!.pill = placer.place(spots, id === highlight)
-  }
-  // 2. bolt、anchor 的牌子
+  // 1. bolt、anchor 的牌子（位置固定）
   for (const id of priority) {
     if (!bolts.includes(id)) continue
     for (const [pos, p] of Object.entries(marks[id].bolts ?? {}).sort(([a], [b]) => a.localeCompare(b))) {
       const anchor = pos.startsWith('A')
       const label = anchor ? '××' : `× ${pos}`
       const at = px(photo, p) as Pt
-      const pill = placer.place([centeredBox(at, (textWidth(label, BOLT_FONT) + 12) * k, BOLT_H * k)])
+      // 編輯時 bolt 一定要看得到（牌子就是拖曳的地方）
+      const pill = placer.place([centeredBox(at, (textWidth(label, BOLT_FONT) + 12) * k, BOLT_H * k)], editing)
       if (pill) plan.get(id)!.bolts.push({ pos, at, anchor, label, pill })
     }
   }
+  // 2. 路線編號牌（solo 時其他路線的編號在說明之後才放，見 4.）
+  /** 線在畫面上很短（只畫了一小段、縮得很小）的路線：其他編號都放好之後才放，放得下才標 */
+  const short = (id: string) => id !== highlight && !!lineOf(id) && lineOf(id)!.length >= 2 && length.get(id)! < MIN_LABEL_LINE_PX
+  const placePill = (id: string, small: boolean) => {
+    const text = labels.get(id)
+    if (!text) return
+    const f = small ? SMALL_PILL : 1
+    const line = lineOf(id)
+    const w = (textWidth(text, PILL_FONT * f) + 14 * f) * k
+    const h = PILL_H * f * k
+    let spots: Box[]
+    if (line && line.length >= 2) {
+      const on = labelLine(id, line)
+      const along = (small ? SMALL_SPOTS : LABEL_SPOTS).map((f) => pointAlong(on, f))
+      spots = along.map((p) => centeredBox(p, w, h))
+      // 很短的線（常常是從照片邊緣出去的示意線）：線上放不下時，放在線的終點上面或旁邊
+      if (short(id)) {
+        const [ex, ey] = line[line.length - 1]
+        spots.push(centeredBox([ex, ey - h * 0.9], w, h), centeredBox([ex + w / 2 + h / 3, ey], w, h), centeredBox([ex - w / 2 - h / 3, ey], w, h))
+      }
+      // 選到的路線一定要標：線上都沒空位時放在線的旁邊
+      if (id === highlight) spots.push(...along.flatMap(([x, y]) => [centeredBox([x + w / 2 + h / 2, y], w, h), centeredBox([x - w / 2 - h / 2, y], w, h)]))
+    } else {
+      // 沒有線段：標在最下面的 bolt 旁邊
+      const low = lowestBolt(photo, marks[id].bolts)
+      if (!low) return
+      spots = [centeredBox([low[0], low[1] + h], w, h), centeredBox([low[0], low[1] - h], w, h)]
+    }
+    const entry = plan.get(id)!
+    entry.pill = placer.place(spots, id === highlight && !editing)
+    entry.small = small
+  }
+  const mains = priority.filter((id) => !solo || id === highlight)
+  for (const id of mains) if (!short(id)) placePill(id, false)
+  for (const id of mains) if (short(id)) placePill(id, false)
   // 3. 多的說明：編號牌下面的難度與名稱、bolt 旁邊的材質與年份（空間夠才顯示）
-  for (const id of priority) {
+  for (const id of editing ? [] : priority) {
     const entry = plan.get(id)!
     const i = info?.get(id)
     if (entry.pill && i) {
       const len = length.get(id)!
-      const lines = [id === highlight || len >= GRADE_LINE_PX ? i.grade : undefined, id === highlight || len >= NAME_LINE_PX ? i.name : undefined].filter((x): x is string => !!x)
-      for (const shown of [lines, lines.slice(0, 1)]) {
-        if (shown.length === 0) break
-        const w = Math.max(...shown.map((t) => textWidth(t, NOTE_FONT))) * k
-        const h = shown.length * NOTE_LINE * k
-        const cx = entry.pill.x + entry.pill.w / 2
-        const box = placer.place([
-          { x: cx - w / 2, y: entry.pill.y + entry.pill.h + 4 * k, w, h },
-          { x: cx - w / 2, y: entry.pill.y - h - 4 * k, w, h },
-        ])
-        if (box) {
-          entry.note = { box, lines: shown }
-          break
-        }
+      const grade = id === highlight || len >= GRADE_LINE_PX ? i.grade : undefined
+      const name = id === highlight || len >= NAME_LINE_PX ? i.name : undefined
+      // 版本：難度＋名稱一行、名稱換行，最後只有難度
+      const versions: string[][] = []
+      const add = (v: (string | undefined)[]) => {
+        const lines = v.filter((x): x is string => !!x)
+        if (lines.length && !versions.some((o) => o.join('|') === lines.join('|'))) versions.push(lines)
       }
+      add([grade, name])
+      for (const wpx of WRAP_PX) add([grade, ...(name ? wrapText(name, NOTE_FONT, wpx) : [])])
+      add([grade])
+      const pill = entry.pill
+      const got = placer.placeFirst(
+        versions.map((lines) => {
+          const w = Math.max(...lines.map((t) => textWidth(t, NOTE_FONT))) * k
+          const h = lines.length * NOTE_LINE * k
+          const cx = pill.x + pill.w / 2
+          const cy = pill.y + pill.h / 2
+          const g = 4 * k
+          return {
+            value: lines,
+            candidates: [
+              { x: cx - w / 2, y: pill.y + pill.h + g, w, h },
+              { x: cx - w / 2, y: pill.y - h - g, w, h },
+              { x: pill.x + pill.w + g, y: cy - h / 2, w, h },
+              { x: pill.x - w - g, y: cy - h / 2, w, h },
+              { x: pill.x + pill.w + g, y: pill.y + pill.h + g, w, h },
+              { x: pill.x - w - g, y: pill.y + pill.h + g, w, h },
+              { x: pill.x + pill.w + g, y: pill.y - h - g, w, h },
+              { x: pill.x - w - g, y: pill.y - h - g, w, h },
+            ],
+          }
+        }),
+        true,
+      )
+      if (got) entry.note = { box: got.box, lines: got.value }
     }
     for (const b of entry.bolts) {
       const text = i?.bolts[b.pos]
       if (!text) continue
-      const w = textWidth(text, NOTE_FONT) * k
-      const h = NOTE_LINE * k
-      const y = b.at[1] - h / 2
-      const box = placer.place([
-        { x: b.pill.x + b.pill.w + 4 * k, y, w, h },
-        { x: b.pill.x - w - 4 * k, y, w, h },
-      ])
-      if (box) b.note = { box, text }
+      // 一行放不下時，材質與年份分兩行
+      const versions = [[text], ...WRAP_PX.map((wpx) => wrapText(text, NOTE_FONT, wpx))].filter((v, j, all) => all.findIndex((o) => o.join('|') === v.join('|')) === j)
+      const g = 4 * k
+      const got = placer.placeFirst(
+        versions.map((lines) => {
+          const w = Math.max(...lines.map((t) => textWidth(t, NOTE_FONT))) * k
+          const h = lines.length * NOTE_LINE * k
+          const y = b.at[1] - h / 2
+          const cx = b.at[0] - w / 2
+          return {
+            value: lines,
+            candidates: [
+              { x: b.pill.x + b.pill.w + g, y, w, h },
+              { x: b.pill.x - w - g, y, w, h },
+              { x: cx, y: b.pill.y + b.pill.h + g, w, h },
+              { x: cx, y: b.pill.y - h - g, w, h },
+            ],
+          }
+        }),
+        true,
+      )
+      if (got) b.note = { box: got.box, lines: got.value }
     }
+  }
+
+  // 4. solo：其他路線的編號（小、淡），放得下才標，不帶說明
+  if (solo && !editing) {
+    const others = priority.filter((id) => id !== highlight)
+    for (const id of others) if (!short(id)) placePill(id, true)
+    for (const id of others) if (short(id)) placePill(id, true)
   }
 
   // SVG 的 <a> 的 href 不是字串，站內換頁攔不到（router.ts），改用點擊與 Enter 換頁
@@ -247,6 +352,8 @@ export function TopoLines({
       {ids.map((id) => {
         const line = lineOf(id)
         const start = line?.[0]
+        // 終點（看的時候）：空心圓圈，和實心的起點分得出來；編輯時每個點都有把手，不另外畫
+        const end = !editing && line && line.length >= 2 ? line[line.length - 1] : undefined
         const on = id === highlight
         const cls = clsOf(id)
         const body = (
@@ -256,12 +363,13 @@ export function TopoLines({
               return (
                 <g key={i}>
                   <path className="topo-hit" d={d} strokeWidth={18 * k} />
-                  <path className="topo-halo" d={d} strokeWidth={(on ? 7 : 5.5) * k} />
-                  <path className="topo-line" d={d} strokeWidth={(on ? 4 : 2.8) * k} />
+                  <path className="topo-halo" d={d} strokeWidth={(editing ? (on ? 3.6 : 3) : on ? 7 : 5.5) * k} />
+                  <path className="topo-line" d={d} strokeWidth={(editing ? (on ? 2 : 1.6) : on ? 4 : 2.8) * k} />
                 </g>
               )
             })}
-            {start && <circle className="topo-start" cx={start[0]} cy={start[1]} r={(on ? 5.5 : 4.5) * k} strokeWidth={1.5 * k} />}
+            {start && !(editing && on) && <circle className="topo-start" cx={start[0]} cy={start[1]} r={(editing ? 3 : on ? 4 : 3.2) * k} strokeWidth={(editing ? 1 : 1.5) * k} />}
+            {end && <circle className="topo-end" cx={end[0]} cy={end[1]} r={(on ? 3.6 : 3) * k} strokeWidth={(on ? 1.8 : 1.4) * k} />}
           </>
         )
         return pick ? (
@@ -295,16 +403,20 @@ export function TopoLines({
                   {b.label}
                 </text>
                 {b.note && (
-                  <text className="topo-note" x={b.note.box.x} y={b.note.box.y + b.note.box.h / 2} fontSize={NOTE_FONT * k} strokeWidth={2.5 * k} dominantBaseline="central">
-                    {b.note.text}
+                  <text className="topo-note" textAnchor="middle" fontSize={NOTE_FONT * k} strokeWidth={2.5 * k}>
+                    {b.note.lines.map((t, i) => (
+                      <tspan key={i} x={b.note!.box.x + b.note!.box.w / 2} y={b.note!.box.y + (i + 0.5) * NOTE_LINE * k} dominantBaseline="central">
+                        {t}
+                      </tspan>
+                    ))}
                   </text>
                 )}
               </g>
             ))}
             {p.pill && labels.get(id) && (
-              <g className="topo-badge">
+              <g className={`topo-badge${p.small ? ' small' : ''}`}>
                 <rect x={p.pill.x} y={p.pill.y} width={p.pill.w} height={p.pill.h} rx={p.pill.h / 2} strokeWidth={1.5 * k} />
-                <text x={p.pill.x + p.pill.w / 2} y={p.pill.y + p.pill.h / 2} fontSize={PILL_FONT * k} dominantBaseline="central" textAnchor="middle">
+                <text x={p.pill.x + p.pill.w / 2} y={p.pill.y + p.pill.h / 2} fontSize={PILL_FONT * (p.small ? SMALL_PILL : 1) * k} dominantBaseline="central" textAnchor="middle">
                   {labels.get(id)}
                 </text>
               </g>

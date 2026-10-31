@@ -1,18 +1,17 @@
 /**
- * 路線的分享圖片（Open Graph，1200×1200 正方形）：Facebook、LINE 分享路線時顯示，不再每條都是網站圖示。
+ * 分享圖片（Open Graph，1200×1200 正方形）：地圖、路線清單、編輯模式、首頁的圖片，以及共用的字型、文字、地圖、標誌
+ * （路線、區域、分區的卡片見 ogCard.ts）。
  * 正方形：Facebook 手機版把寬圖裁成正方形，左右的內容會被切掉。
- * 上半部是路線資訊（岩場／區域／分區、編號與名稱、難度、種類、高度；黃燈、紅燈時加上提醒），
- * 下半部是路線所在區域附近的放大地圖（圓角），左下角是網站名稱。配色與手機版相同。
  */
 import { existsSync, readFileSync } from 'node:fs'
 import { GlobalFonts, type Image, type SKRSContext2D, createCanvas, loadImage } from '@napi-rs/canvas'
-import type { Area, Route, Sector } from '../../src/data/schema'
-import { gradeBand, quickdraws } from '../../src/format'
+import type { Area, Sector } from '../../src/data/schema'
+import { gradeBand } from '../../src/format'
 
 export const OG_SIZE = { w: 1200, h: 1200 }
 /** 版面以 840×840 設計、放大輸出成 OG_SIZE：手機上縮成小卡時，字和地圖才夠大 */
-const D = { w: 840, h: 840 }
-const ZOOM = OG_SIZE.w / D.w
+export const D = { w: 840, h: 840 }
+export const ZOOM = OG_SIZE.w / D.w
 
 /**
  * 字型檔：英數用西文字型（中文字型裡的 ’ 等標點是全形寬度），中文用無襯線黑體。
@@ -44,13 +43,13 @@ export function findOgFonts() {
   return (foundFonts ??= FONT_CANDIDATES.find((f) => f.files.every((file) => existsSync(file))))
 }
 
-function ogFonts() {
+export function ogFonts() {
   const found = findOgFonts()
   if (!found) throw new Error('找不到字型：Linux 請執行 scripts/install-og-fonts.sh')
   return found
 }
 
-type Ring = [number, number][]
+export type Ring = [number, number][]
 export interface OgMap {
   /** 陸地（經緯度） */
   land: Ring[]
@@ -74,14 +73,14 @@ const LIGHT = {
 }
 const C = LIGHT
 
-const TYPE_ZH: Record<string, string> = { sport: '運攀', trad: '傳攀', toprope: '上方架繩', boulder: '抱石', mixed: '混合' }
+export const TYPE_ZH: Record<string, string> = { sport: '運攀', trad: '傳攀', toprope: '上方架繩', boulder: '抱石', mixed: '混合' }
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
 const CJK = /[　-鿿＀-￯]/
 
 /** 文字內容：中文與英數分成片段，各自指定字型（同一段列兩套字型時，中文的備援字型不會照粗細挑） */
-function rich(text: string): string {
+export function rich(text: string): string {
   const fonts = ogFonts()
   const runs: { cjk: boolean; text: string }[] = []
   for (const c of text) {
@@ -94,12 +93,12 @@ function rich(text: string): string {
 }
 
 /** 文字寬度（估計）：中日文字約 1 個字高，英數約 0.56 */
-function textWidth(text: string, size: number): number {
+export function textWidth(text: string, size: number): number {
   return [...text].reduce((w, c) => w + (CJK.test(c) ? 1 : 0.56) * size, 0)
 }
 
 /** 放得進 maxWidth 的最大字級（不小於 min），太長就截斷加「…」 */
-function fit(text: string, max: number, min: number, maxWidth: number): { text: string; size: number } {
+export function fit(text: string, max: number, min: number, maxWidth: number): { text: string; size: number } {
   for (let size = max; size >= min; size -= 2) if (textWidth(text, size) <= maxWidth) return { text, size }
   let cut = text
   while (cut.length > 1 && textWidth(cut + '…', min) > maxWidth) cut = cut.slice(0, -1)
@@ -110,7 +109,7 @@ function fit(text: string, max: number, min: number, maxWidth: number): { text: 
  * 切成第一行放得下的部分與剩下的部分。優先在「 / 」「 | 」「 > 」這類分隔後面斷開（分隔留在第一行），
  * 其次在空白、括號前斷開，都沒有才硬切。
  */
-function splitLine(text: string, size: number, maxWidth: number): [string, string] {
+export function splitLine(text: string, size: number, maxWidth: number): [string, string] {
   let end = text.length
   while (end > 1 && textWidth(text.slice(0, end), size) > maxWidth) end--
   const head = text.slice(0, end)
@@ -124,7 +123,7 @@ function splitLine(text: string, size: number, maxWidth: number): [string, strin
  * 垂直置中的文字基線：cy 是文字中線，基線往下約 0.35 個字高。
  * 不用 dominant-baseline="central"：Skia（@napi-rs/canvas）不支援。
  */
-const mid = (cy: number, size: number) => (cy + size * 0.35).toFixed(1)
+export const mid = (cy: number, size: number) => (cy + size * 0.35).toFixed(1)
 
 /** 一個膠囊：底色、文字 */
 function pill(x: number, y: number, text: string, opts: { size: number; bg: string; fg: string; bold?: boolean; stroke?: string }) {
@@ -136,7 +135,7 @@ function pill(x: number, y: number, text: string, opts: { size: number; bg: stri
 }
 
 /** 下半部的圓角框（地圖、清單）：在左下角標誌上方；上半部的內容放不下時往下移、變矮（見 frame） */
-type Box = { x: number; y: number; w: number; h: number; r: number }
+export type Box = { x: number; y: number; w: number; h: number; r: number }
 const PANEL: Box = { x: 32, y: 360, w: D.w - 64, h: 360, r: 24 }
 
 /** 地圖範圍至少這麼大（度，約 400 公尺），小區域（第一洞）也看得到周圍 */
@@ -146,7 +145,15 @@ const MAP_MIN_SPAN = 0.0036
  * 右邊的地圖：放大到路線所在的大區域附近（areaKey 省略時是整個龍洞）。所在區域實色（不描邊），附近的區域用各自的顏色、半透明。
  * areaColors：大區域 key → 顏色（Sheet 上的區域色）
  */
-function areaMap(map: OgMap, areaKey: string | undefined, areaColors: Record<string, string>, box: Box, othersOpacity = 0.22, pad = 1.5, editHandles = false): string {
+/** 地圖的配色（預設是淺色版；路線、區域的分享卡片用深色版，見 ogCard.ts） */
+export interface MapColors {
+  sea: string
+  land: string
+  areaLine: string
+  brand: string
+}
+
+export function areaMap(map: OgMap, areaKey: string | undefined, areaColors: Record<string, string>, box: Box, othersOpacity = 0.22, pad = 1.5, editHandles = false, colors: MapColors = C): string {
   const rings = (areaKey && map.areas[areaKey]) || Object.values(map.areas).flat()
   const pts = rings.flat()
   const lat0 = pts.reduce((n, p) => n + p[1], 0) / pts.length
@@ -165,15 +172,15 @@ function areaMap(map: OgMap, areaKey: string | undefined, areaColors: Record<str
   const path = (r: Ring[]) => r.map((ring) => `M${ring.map(xy).join('L')}Z`).join('')
   const others = Object.entries(map.areas)
     .filter(([k]) => k !== areaKey)
-    .map(([k, r]) => `<path d="${path(r)}" fill="${areaColors[k] ?? C.areaLine}" fill-opacity="${othersOpacity}"/>`)
+    .map(([k, r]) => `<path d="${path(r)}" fill="${areaColors[k] ?? colors.areaLine}" fill-opacity="${othersOpacity}"/>`)
     .join('')
-  const color = (areaKey && areaColors[areaKey]) || C.brand
+  const color = (areaKey && areaColors[areaKey]) || colors.brand
   const target = areaKey && map.areas[areaKey] ? `<path d="${path(map.areas[areaKey])}" fill="${color}"/>` : ''
   // 編輯模式：最大的一圈範圍畫上頂點（白點）與邊上的小點，像編輯中的樣子
   const handles = editHandles && areaKey && map.areas[areaKey] ? editVertices(map.areas[areaKey], xy, color) : ''
   return `<clipPath id="map"><rect x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}" rx="${box.r}"/></clipPath>
-<g clip-path="url(#map)"><rect x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}" fill="${C.sea}"/>
-<path d="${path(map.land)}" fill="${C.land}" fill-rule="evenodd"/>${others}${target}${handles}</g>`
+<g clip-path="url(#map)"><rect x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}" fill="${colors.sea}"/>
+<path d="${path(map.land)}" fill="${colors.land}" fill-rule="evenodd"/>${others}${target}${handles}</g>`
 }
 
 /** 範圍最大的一圈取約 12 個頂點：白底有色邊的圓點，頂點之間的中點是較小的空心點（與編輯模式的編輯點相同） */
@@ -219,7 +226,7 @@ export async function ogImagePng(svg: string, markAt: { x: number; y: number } =
 }
 
 /** 第一次轉檔時：註冊字型、載入 TOCC 標誌（圖片是非同步解碼，要等載入完才畫得出來） */
-async function loadToccImage(): Promise<Image> {
+export async function loadToccImage(): Promise<Image> {
   const fonts = ogFonts()
   for (const file of fonts.files) GlobalFonts.registerFromPath(file)
   // 字型集合（.ttc）裡要有指定的字族，不然中文會用到別的字型
@@ -238,7 +245,7 @@ const HOLD = 'M-30,-56 C-6,-64 22,-50 26,-20 C30,10 24,46 0,56 C-24,62 -40,40 -3
 const HOLD_HOLE = { cx: -3.7, cy: -23.8, r: 9 }
 
 /** 岩點：中心 (x, y)、縮放 scale；孔用底色 */
-function holdMark(x: number, y: number, scale: number, fill: string, hole: string): string {
+export function holdMark(x: number, y: number, scale: number, fill: string, hole: string): string {
   return `<g transform="translate(${x} ${y}) rotate(-16) scale(${scale})"><path d="${HOLD}" fill="${fill}"/><circle cx="${HOLD_HOLE.cx}" cy="${HOLD_HOLE.cy}" r="${HOLD_HOLE.r}" fill="${hole}"/></g>`
 }
 
@@ -249,9 +256,9 @@ const TOCC_OUTLINE = [
   [455, 810], [415, 730], [380, 665], [378, 575], [425, 505], [478, 455], [530, 370],
 ]
 /** 左下角的臺灣島（TOCC 標誌中央的臺灣島與攀岩者）：左上角與高度 */
-const MARK = { x: 56, y: D.h - 32 - 60, h: 60 }
+export const MARK = { x: 56, y: D.h - 32 - 60, h: 60 }
 /** 臺灣島＋攀岩者畫在 canvas 上（Skia 的 SVG 不畫內嵌的圖片，所以不放在 SVG 裡） */
-function drawToccMark(ctx: SKRSContext2D, image: Image, at: { x: number; y: number }) {
+export function drawToccMark(ctx: SKRSContext2D, image: Image, at: { x: number; y: number }) {
   const k = MARK.h / TOCC_ISLAND.height
   ctx.save()
   ctx.translate(at.x - TOCC_ISLAND.x * k, at.y - TOCC_ISLAND.y * k)
@@ -262,69 +269,6 @@ function drawToccMark(ctx: SKRSContext2D, image: Image, at: { x: number; y: numb
   ctx.clip()
   ctx.drawImage(image, 0, 0)
   ctx.restore()
-}
-
-/** 一條路線的分享圖片（SVG） */
-export function ogImageSvg(route: Route, area: Area, sector: Sector, map: OgMap, crag: { zh: string }, areaColors: Record<string, string>): string {
-  const areaKey = area.id.split('/').pop()!
-  const left = MARK.x
-  const textW = TEXT_W
-  // 左邊的內容從 y=0 排，frame() 再垂直置中
-  const body = [placeLine(`${crag.zh} · ${area.name.zh} · ${sector.name.zh}`, area.color ?? C.brand)]
-
-  // 名稱（括號裡的說明不放）；太長分兩行
-  let y = 94
-  const zh = plainName(route.name.zh)
-  const single = fit(zh, 64, 48, textW)
-  if (!single.text.endsWith('…')) {
-    body.push(`<text x="${left}" y="${y}" font-size="${single.size}" font-weight="700" fill="${C.text}">${rich(single.text)}</text>`)
-  } else {
-    const [first, rest] = splitLine(zh, 46, textW)
-    const second = fit(rest, 46, 36, textW)
-    y = 76 // 兩行的字比較小，第一行往上靠近地點那行
-    body.push(`<text x="${left}" y="${y}" font-size="46" font-weight="700" fill="${C.text}">${rich(first)}</text>`)
-    y += 56
-    body.push(`<text x="${left}" y="${y}" font-size="${second.size}" font-weight="700" fill="${C.text}">${rich(second.text)}</text>`)
-  }
-  // 編號 · 英文名
-  const sub = [route.number && `#${route.number}`, route.name.en && plainName(route.name.en)].filter(Boolean).join(' · ')
-  if (sub) {
-    const en = fit(sub, 28, 22, textW)
-    y += 50
-    body.push(`<text x="${left}" y="${y}" font-size="${en.size}" font-weight="500" fill="${C.muted}">${rich(en.text)}</text>`)
-  }
-
-  // 難度膠囊＋種類、高度（文字，用 · 分開）
-  y += 48
-  const pillSize = 38
-  let x = left
-  if (route.grade) {
-    const g = pill(x, y, route.grade.replace(/\s.*$/, ''), { size: pillSize, bg: C.band[gradeBand(route.gradeValue) ?? 'easy'], fg: C.text, bold: true })
-    body.push(g.svg)
-    x += g.w + 22
-  }
-  const facts = [
-    route.type && (quickdraws(route) ? `${quickdraws(route)}快扣 ${TYPE_ZH[route.type]}` : TYPE_ZH[route.type]),
-    route.heightM && `${route.heightM} m`,
-  ].filter(Boolean) as string[]
-  if (facts.length) body.push(`<text x="${x}" y="${mid(y + pillSize * 0.8, 28)}" font-size="28" font-weight="700" fill="${C.text}">${rich(facts.join('  ·  '))}</text>`)
-
-  // 黃燈、紅燈：與路線頁相同的色塊（綠燈不顯示；日期太細，不放）
-  const closed = route.status === 'closed' || route.status === 'to-remove'
-  const level = closed || route.safety === 'red' ? 'danger' : route.safety === 'yellow' ? 'warn' : undefined
-  if (level) {
-    const c = C[level]
-    const label = [level === 'danger' ? '危險' : '小心', closed && route.statusLabel].filter(Boolean).join(' · ')
-    const by = y + pillSize * 1.6 + 30
-    const bw = textWidth(label, 26) + 96
-    body.push(`<rect x="${left}" y="${by}" width="${bw}" height="56" rx="16" fill="${c.bg}"/>`)
-    body.push(`<circle cx="${left + 32}" cy="${by + 28}" r="15" fill="${c.color}"/>`)
-    body.push(`<text x="${left + 32}" y="${mid(by + 29, 22)}" font-size="22" font-weight="700" fill="#fff" text-anchor="middle">!</text>`)
-    body.push(`<text x="${left + 60}" y="${mid(by + 29, 26)}" font-size="26" font-weight="700" fill="${c.fg}">${rich(label)}</text>`)
-  }
-
-  const bottom = level ? y + pillSize * 1.6 + 30 + 56 : y + pillSize * 1.6
-  return frame((box) => areaMap(map, areaKey, areaColors, box), body, bottom)
 }
 
 const TEXT_W = D.w - MARK.x * 2

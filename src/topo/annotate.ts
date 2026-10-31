@@ -68,27 +68,75 @@ export const overlaps = (a: Box, b: Box, gap = 0) => a.x < b.x + b.w + gap && b.
 /** 以 at 為中心、寬 w 高 h 的框 */
 export const centeredBox = ([x, y]: Pt, w: number, h: number): Box => ({ x: x - w / 2, y: y - h / 2, w, h })
 
+/** 線段 a–b 是否穿過框 */
+export function segmentHitsBox(a: Pt, b: Pt, box: Box): boolean {
+  const inBox = ([x, y]: Pt) => x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h
+  if (inBox(a) || inBox(b)) return true
+  // Liang–Barsky：線段參數 t 在框裡的範圍
+  let t0 = 0
+  let t1 = 1
+  const dx = b[0] - a[0]
+  const dy = b[1] - a[1]
+  for (const [p, q] of [
+    [-dx, a[0] - box.x],
+    [dx, box.x + box.w - a[0]],
+    [-dy, a[1] - box.y],
+    [dy, box.y + box.h - a[1]],
+  ]) {
+    if (p === 0) {
+      if (q < 0) return false
+    } else {
+      const t = q / p
+      if (p < 0) t0 = Math.max(t0, t)
+      else t1 = Math.min(t1, t)
+      if (t0 > t1) return false
+    }
+  }
+  return true
+}
+
 /**
  * 依序放牌子：先放的優先。每個牌子給幾個候選位置，取第一個不超出範圍、不和已放的重疊的；都不行就不放（藏起來），
  * force 時（例如選到的路線）放不下也放第一個候選位置。
+ * 說明文字（avoidLines）優先放在不壓到線的位置，沒有的話才壓在線上；牌子之間一律不重疊。
  */
 export class Placer {
   private placed: Box[] = []
   constructor(
     private bounds: Box,
     private gap = 3,
+    private lines: Pt[][] = [],
   ) {}
 
   private inside(b: Box) {
     return b.x >= this.bounds.x && b.y >= this.bounds.y && b.x + b.w <= this.bounds.x + this.bounds.w && b.y + b.h <= this.bounds.y + this.bounds.h
   }
 
+  /** 這個位置放得下：在範圍內、不和已放的重疊 */
+  fits(c: Box) {
+    return this.inside(c) && !this.placed.some((p) => overlaps(c, p, this.gap))
+  }
+
+  /** 壓到線 */
+  onLine(c: Box) {
+    return this.lines.some((line) => line.slice(1).some((p, i) => segmentHitsBox(line[i], p, c)))
+  }
+
   /** 回傳放在哪一個候選位置（框）；放不下回傳 undefined */
-  place(candidates: Box[], force = false): Box | undefined {
-    const fit = candidates.find((c) => this.inside(c) && !this.placed.some((p) => overlaps(c, p, this.gap)))
+  place(candidates: Box[], force = false, avoidLines = false): Box | undefined {
+    const fit = (avoidLines && candidates.find((c) => this.fits(c) && !this.onLine(c))) || candidates.find((c) => this.fits(c))
     const chosen = fit ?? (force ? candidates[0] : undefined)
     if (chosen) this.placed.push(chosen)
     return chosen
+  }
+
+  /** 第一個放得下的版本（例如一行、換行、少一點資訊），各版本的候選位置依序試；都放不下回傳 undefined */
+  placeFirst<T>(variants: { value: T; candidates: Box[] }[], avoidLines = false): { value: T; box: Box } | undefined {
+    for (const v of variants) {
+      const box = this.place(v.candidates, false, avoidLines)
+      if (box) return { value: v.value, box }
+    }
+    return undefined
   }
 
   /** 先佔住一塊（例如線上已經畫了的點），後面的牌子避開 */
@@ -100,4 +148,24 @@ export class Placer {
 /** 文字在畫面上的寬度（螢幕像素，估計值）：中日文約 1 個字高，英數約 0.6 */
 export function textWidth(text: string, fontPx: number): number {
   return [...text].reduce((w, c) => w + (/[　-鿿＀-￯]/.test(c) ? 1 : 0.6) * fontPx, 0)
+}
+
+/**
+ * 依寬度換行（螢幕像素）：在空白、「·」處斷開；中日文可以在任何字之間斷開；
+ * 單一個英文字比寬度長時不硬切。
+ */
+export function wrapText(text: string, fontPx: number, maxWidth: number): string[] {
+  // 斷點：空白（含「 · 」）之後、中日文字的前後
+  const tokens = text.match(/[　-鿿＀-￯]|[^\s　-鿿＀-￯]+\s*|\s+/g) ?? [text]
+  const lines: string[] = []
+  let cur = ''
+  for (const tok of tokens) {
+    if (cur && textWidth((cur + tok).trimEnd(), fontPx) > maxWidth) {
+      lines.push(cur.trim())
+      cur = tok.trimStart()
+    } else cur += tok
+  }
+  if (cur.trim()) lines.push(cur.trim())
+  // 「·」不放在行首、行尾
+  return lines.map((l) => l.replace(/^·\s*|\s*·$/g, '')).filter(Boolean)
 }

@@ -4576,6 +4576,67 @@ body:has(.sim-banner) main.map:not(.shell main.map) {
   margin: 0;
 }
 
+/* 點照片開全螢幕（路線卡片、手機的分區頁） */
+.topo.openable {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.topo.openable:focus-visible {
+  outline: 2px solid var(--area-color, var(--brand));
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
+}
+
+/*
+ * 路線卡片的 Topo：和上面標題卡的地圖連成一整塊——照片撐滿卡片的寬度、上緣淡入卡片的漸層、左右下緣淡出，
+ * 邊緣帶一點區域色；照片灰階（同編輯器），只有這條路線周圍是原色（RouteReveal），其他路線淡淡的
+ */
+[data-layout] .route-m .route-topo {
+  margin: -6px -16px 0 -14px;
+}
+
+.route-topo .topo-frame {
+  border-radius: 0;
+  background: transparent;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 22%, #000 94%, transparent), linear-gradient(to right, transparent, #000 5%, #000 95%, transparent);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to bottom, transparent, #000 22%, #000 94%, transparent), linear-gradient(to right, transparent, #000 5%, #000 95%, transparent);
+  mask-composite: intersect;
+}
+
+.route-topo .topo-frame > img {
+  filter: grayscale(1) contrast(0.8);
+}
+
+/* 邊緣一圈淡淡的區域色 */
+.route-topo .topo-frame::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  box-shadow: inset 0 0 36px 6px color-mix(in srgb, var(--area-color, var(--brand)) 45%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+
+.route-topo .topo-frame.ready::after {
+  opacity: 1;
+}
+
+.route-topo .topo-frame > svg {
+  z-index: 2;
+}
+
+.route-topo .topo-halo {
+  display: none;
+}
+
+.route-topo .topo-route.dim {
+  opacity: 0.4;
+}
+
 /* 全螢幕：黑底，照片在舞台裡縮放與平移（src/topo/TopoFullscreen.tsx） */
 .topo-full-open {
   position: absolute;
@@ -4611,6 +4672,28 @@ body:has(.sim-banner) main.map:not(.shell main.map) {
 
 .topo-bolt-toggle[aria-pressed='true'] {
   background: #ff5a36;
+}
+
+/* 全螢幕（手機）：右上是關閉、bolt、編輯（明確按了才進入編輯） */
+.topo-full-edit {
+  position: absolute;
+  top: calc(8px + env(safe-area-inset-top));
+  right: 60px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  cursor: pointer;
+}
+
+.topo-bolt-toggle.full ~ .topo-full-edit {
+  right: 112px;
 }
 
 /* 全螢幕：關閉按鈕在右上角，bolt 按鈕放在它左邊 */
@@ -4830,13 +4913,16 @@ dialog.topo-full[open] {
   user-select: none;
 }
 
-/* 標記的風格：深紅色的平滑曲線，起點一個圓點；編號、anchor 是紅色的圓角牌，bolt 是藍色的圓角牌；說明是白字加深色描邊 */
+/* 標記的風格：深紅色的平滑曲線，起點一個圓點；編號、anchor 是紅色的圓角牌，bolt 是藍色的圓角牌（都沒有白框）；說明是白字加深色描邊 */
 .topo-route {
   --topo-line: #c8102e;
   --topo-pill: #c8102e;
 }
 
-.topo-route.on {
+/* 編輯時的點、放大鏡：和選到的路線同色 */
+.topo-route.on,
+.topo-handles,
+.topo-loupe {
   --topo-line: #e11d2e;
   --topo-pill: #e11d2e;
 }
@@ -4847,7 +4933,9 @@ dialog.topo-full[open] {
   --topo-pill: #1565c0;
 }
 
-.topo-route.kind-sport.on {
+.topo-route.kind-sport.on,
+.topo-handles.kind-sport,
+.topo-loupe.kind-sport {
   --topo-line: #1e7bff;
   --topo-pill: #1e7bff;
 }
@@ -4877,7 +4965,13 @@ dialog.topo-full[open] {
 
 .topo-start {
   fill: var(--topo-line);
-  stroke: #fff;
+  stroke: none;
+}
+
+/* 終點：空心圓圈（起點是實心圓點） */
+.topo-end {
+  fill: #141414;
+  stroke: var(--topo-line);
 }
 
 g.topo-route.link {
@@ -4902,7 +4996,7 @@ g.topo-route.link:focus-visible .topo-halo {
 
 .topo-badge rect {
   fill: var(--topo-pill);
-  stroke: #fff;
+  stroke: none;
 }
 
 .topo-badge text {
@@ -4913,8 +5007,7 @@ g.topo-route.link:focus-visible .topo-halo {
 
 .topo-bolt rect {
   fill: #1ea0e6;
-  stroke: #fff;
-  stroke-width: 1px;
+  stroke: none;
 }
 
 .topo-bolt.anchor rect {
@@ -5116,6 +5209,11 @@ button.key-row:disabled {
   transform-origin: center;
 }
 
+/* 自動縮放（選路線、選點）：平滑地移過去 */
+.topo-zoom.gliding .topo-zoom-inner {
+  transition: transform 0.3s ease;
+}
+
 .topo-zoom.panning,
 .topo-zoom.panning svg {
   cursor: grab;
@@ -5160,8 +5258,9 @@ button.key-row:disabled {
 
 .topo-handles circle,
 .topo-handles rect {
-  fill: rgba(255, 255, 255, 0.92);
-  stroke: #c8102e;
+  /* 實心、和線同色的點（起點也一樣），線不會從點的中間穿過；沒有白框 */
+  fill: var(--topo-line);
+  stroke: none;
   cursor: move;
 }
 
@@ -5180,11 +5279,6 @@ button.key-row:disabled {
   fill: transparent;
   stroke: none;
   pointer-events: all;
-}
-
-.topo-handles circle.start {
-  fill: #c8102e;
-  stroke: #fff;
 }
 
 .topo-fork circle {
@@ -5350,10 +5444,9 @@ button.key-row:disabled {
   -webkit-touch-callout: none;
 }
 
-.topo-handles circle.picked,
-.topo-handles rect.bolt.picked {
-  fill: var(--brand);
-  stroke: #fff;
+.topo-handles circle.picked {
+  /* 選到的點大一點、外面一圈黃色 */
+  stroke: #ffd400;
 }
 
 .topo-handles rect.bolt.picked {
@@ -5651,7 +5744,8 @@ html {
 
 /* ---------- Topo 編輯：手機版（整個畫面，src/topo/TopoEditor.tsx 的 PhoneShell） ---------- */
 
-/* 上面：關閉、標題、提交；照片（右下角浮動按鈕）；可拖曳的分隔線；下面是路線清單 */
+/* 照片固定滿版，控制都浮在照片上（和 Climbio 的定線畫面同一套）：
+   上面一排是 46px 的深色半透明圓鈕（關閉、底色切換、提交），左邊接著目前的路線；下面只有一層：左邊選工具、右邊復原與刪除點；路線清單從下方滑出 */
 dialog.topo-phone {
   width: 100%;
   max-width: none;
@@ -5673,35 +5767,165 @@ dialog.topo-phone::backdrop {
   background: #000;
 }
 
+.topo-phone {
+  --topo-btn: 46px;
+  --topo-gap: 10px;
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@media (max-width: 389px) {
+  .topo-phone {
+    --topo-btn: 42px;
+    --topo-gap: 6px;
+  }
+}
+
+/* 按下去縮一下、放開彈回來 */
+.topo-phone button {
+  transition:
+    transform 0.35s var(--spring),
+    background-color 0.15s,
+    opacity 0.15s;
+}
+
+.topo-phone button:active:not(:disabled) {
+  transform: scale(0.94);
+  transition-duration: 0.08s;
+}
+
 .topo-phone-top {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 3;
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: calc(6px + env(safe-area-inset-top)) 8px 6px;
-  background: var(--surface);
+  gap: var(--topo-gap);
+  padding: calc(12px + env(safe-area-inset-top)) 12px 0;
+  pointer-events: none;
 }
 
-.topo-phone-top .edit-btn.primary {
-  min-height: 40px;
+.topo-phone-top > * {
+  pointer-events: auto;
 }
 
-.topo-phone-title {
-  flex: 1;
-  text-align: center;
+/* 沒有照片的畫面（載入中、上傳）：上面一排照常排在畫面裡 */
+.topo-phone > .topo-phone-top {
+  position: static;
 }
 
-.topo-phone-close {
+/* 浮在照片上的圓鈕：半透明深色底，不用毛玻璃（照片縮放、拖曳時每格都要重算模糊） */
+.topo-round {
   display: grid;
   place-items: center;
   flex: none;
-  width: 44px;
-  height: 44px;
+  width: var(--topo-btn);
+  height: var(--topo-btn);
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: transparent;
-  color: var(--text);
+  background: rgba(14, 14, 15, 0.35);
+  color: #fff;
   cursor: pointer;
+}
+
+.topo-round svg {
+  width: 22px;
+  height: 22px;
+}
+
+.topo-round.primary {
+  background: var(--brand);
+  color: var(--on-brand);
+}
+
+.topo-round:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.topo-round.busy svg {
+  animation: topo-pulse 0.8s ease-in-out infinite alternate;
+}
+
+@keyframes topo-pulse {
+  to {
+    opacity: 0.3;
+  }
+}
+
+/* 底色切換：灰階是定線的預設，開著時只把圖示換成品牌色，不鋪底 */
+.topo-gray-btn[aria-pressed='true'] {
+  color: var(--brand);
+}
+
+/* 目前的路線：編號（窄體斜字）＋名稱，點了從下方打開路線清單 */
+.topo-phone-title {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  text-align: left;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+}
+
+.topo-phone-title b {
+  flex: none;
+  font-size: 1.75rem;
+  font-style: italic;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.topo-phone-title span {
+  overflow: hidden;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.topo-phone-title svg {
+  flex: none;
+  align-self: center;
+  opacity: 0.7;
+}
+
+/* 提醒（還沒標路線、有更新的版本）、預覽舊版本：上面一排的下面 */
+.topo-phone-notice {
+  position: absolute;
+  top: calc(12px + var(--topo-btn) + 10px + env(safe-area-inset-top));
+  right: 12px;
+  left: 12px;
+  z-index: 3;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.topo-phone-notice > * {
+  pointer-events: auto;
+}
+
+.topo-phone-notice .topo-edit-bar {
+  border-radius: 14px;
+  background: rgba(14, 14, 15, 0.75);
+  color: #fff;
+}
+
+/* 灰階底：路線的線比較清楚；選到的路線周圍疊回原色（RouteReveal），其他路線淡一點 */
+.topo-phone-photo.gray .topo-frame > img {
+  filter: grayscale(1) contrast(0.8);
+}
+
+.topo-phone-photo.gray .topo-route.dim {
+  opacity: 0.45;
 }
 
 /* 照片區：照片依可用的高度縮放（container query），右下角是浮動按鈕 */
@@ -5722,34 +5946,39 @@ dialog.topo-phone::backdrop {
   background: #000;
 }
 
+/* 縮放區撐滿照片區（照片置中），放大後照片可以佔滿整個畫面 */
 .topo-phone .topo-edit-photo .topo-zoom {
-  width: min(100%, calc(100cqh * var(--fit-aspect)));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
   border-radius: 0;
+  /* 上下浮著按鈕佔的高度：照片的上下緣可以拖到按鈕外面（ZoomPane 讀這兩個值） */
+  scroll-padding-top: calc(12px + var(--topo-btn) + 8px + env(safe-area-inset-top));
+  scroll-padding-bottom: calc(16px + var(--topo-btn) + 8px + env(safe-area-inset-bottom));
 }
 
-/* 手機用雙指縮放：只留倍率（點了回到整張），移到左上；下面留給浮動按鈕 */
+.topo-phone .topo-zoom-inner {
+  flex: none;
+}
+
+/* 手機用雙指縮放、點兩下回到原尺寸：不顯示縮放按鈕與倍率 */
 .topo-phone .topo-zoom-controls {
-  top: 8px;
-  right: auto;
-  bottom: auto;
-  left: 8px;
-}
-
-.topo-phone .topo-zoom-controls button:not(.topo-zoom-fit) {
   display: none;
 }
 
 .topo-float {
   position: absolute;
-  right: 8px;
-  bottom: 8px;
+  right: 12px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
   z-index: 3;
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   align-items: center;
-  gap: 6px;
-  max-width: calc(100% - 16px);
+  gap: var(--topo-gap);
+  max-width: calc(100% - 210px);
   pointer-events: none;
 }
 
@@ -5762,17 +5991,21 @@ dialog.topo-phone::backdrop {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-width: 44px;
-  min-height: 44px;
-  padding: 0 14px;
+  min-width: var(--topo-btn);
+  min-height: var(--topo-btn);
+  padding: 0 16px;
   border: 0;
   border-radius: 999px;
-  background: rgba(32, 33, 36, 0.85);
+  background: rgba(14, 14, 15, 0.55);
   color: #fff;
   font: inherit;
   font-weight: 600;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   cursor: pointer;
+}
+
+.topo-float-btn svg {
+  width: 22px;
+  height: 22px;
 }
 
 .topo-float-btn[aria-label] {
@@ -5784,15 +6017,62 @@ dialog.topo-phone::backdrop {
   color: var(--on-brand);
 }
 
+.topo-float-btn.danger {
+  color: #ff4d4d;
+}
+
+/* 左下選工具（和 Climbio 定線的類型膠囊同一套）：畫線、Bolt，選中的鋪品牌色，再按一次結束 */
+.topo-modes {
+  position: absolute;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  left: 12px;
+  z-index: 3;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(14, 14, 15, 0.6);
+}
+
+.topo-modes button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: calc(var(--topo-btn) - 8px);
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.topo-modes button svg {
+  width: 20px;
+  height: 20px;
+}
+
+.topo-modes button[aria-pressed='true'] {
+  background: var(--brand);
+  color: var(--on-brand);
+}
+
+.topo-modes button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .topo-float-btn:disabled {
-  opacity: 0.45;
+  opacity: 0.35;
   cursor: default;
 }
 
 .topo-float-note {
   padding: 6px 12px;
   border-radius: 999px;
-  background: rgba(32, 33, 36, 0.85);
+  background: rgba(14, 14, 15, 0.65);
   color: #fff;
   font-size: 0.9rem;
 }
@@ -5800,9 +6080,9 @@ dialog.topo-phone::backdrop {
 /* 放 bolt：位置一排，浮在按鈕上面，左右滑動 */
 .topo-float-chips {
   position: absolute;
-  right: 8px;
-  bottom: 60px;
-  left: 8px;
+  right: 12px;
+  bottom: calc(16px + var(--topo-btn) + 10px + env(safe-area-inset-bottom));
+  left: 12px;
   z-index: 3;
 }
 
@@ -5819,40 +6099,57 @@ dialog.topo-phone::backdrop {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-/* 分隔線：上下拖曳調整照片與清單的大小 */
-.topo-split {
-  display: grid;
-  place-items: center;
-  height: 20px;
-  background: var(--surface);
-  cursor: row-resize;
-  touch-action: none;
-}
-
-.topo-split::before {
-  content: '';
-  width: 40px;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--border);
-}
-
-.topo-phone-list {
-  height: 38dvh;
-  min-height: 72px;
-  overflow-y: auto;
-  padding: 0 8px calc(8px + env(safe-area-inset-bottom));
-  background: var(--surface);
-}
-
+/* 路線清單（從下方滑出）：只有面板一層捲動（清單本身不再另外捲動，手指上下滑不會卡住） */
 .topo-phone-list .topo-route-row {
   min-height: 48px;
 }
 
+.topo-phone-list .topo-route-list {
+  max-height: none;
+  overflow: visible;
+}
+
+/* 放大鏡：在手指正上方（位置由程式算），十字中心是點的位置 */
+.topo-loupe {
+  position: absolute;
+  z-index: 4;
+  width: 128px;
+  height: 128px;
+  overflow: hidden;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #000;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+.topo-loupe svg {
+  display: block;
+}
+
+.topo-loupe-line {
+  fill: none;
+  stroke: var(--topo-line);
+  stroke-linecap: round;
+}
+
+.topo-loupe-point {
+  fill: var(--topo-line);
+}
+
+.topo-loupe-cross {
+  stroke: #ffd400;
+  stroke-linecap: round;
+}
+
 .topo-phone-status {
   margin: 0;
-  padding: 6px 4px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(14, 14, 15, 0.75);
+  color: #ffd166;
   font-size: 0.85rem;
+  text-align: center;
 }
 
 .topo-phone-message {
@@ -5862,14 +6159,26 @@ dialog.topo-phone::backdrop {
   padding: 24px;
 }
 
-/* 「更多」從下方滑出：復原、重做、分岔、裁切、清除、捨棄、修改記錄 */
-.topo-sheet-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 10;
-  display: flex;
-  align-items: flex-end;
+/* 路線清單從下方滑出 */
+dialog.topo-sheet-backdrop {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
   background: rgba(0, 0, 0, 0.45);
+  color: var(--text);
+  align-items: flex-end;
+}
+
+dialog.topo-sheet-backdrop[open] {
+  display: flex;
+}
+
+dialog.topo-sheet-backdrop::backdrop {
+  background: transparent;
 }
 
 .topo-sheet {
@@ -5877,29 +6186,149 @@ dialog.topo-phone::backdrop {
   max-height: 70dvh;
   overflow-y: auto;
   padding: 8px 12px calc(12px + env(safe-area-inset-bottom));
-  border-radius: 16px 16px 0 0;
+  border-radius: 20px 20px 0 0;
   background: var(--surface);
 }
 
-.topo-sheet-menu {
+/* ---------- 新增 Topo 照片：上傳前先裁切（src/topo/TopoUpload.tsx） ---------- */
+
+/* 整個畫面：照片盡量大、置中，下面一排取消、整張照片、上傳 */
+dialog.topo-upload-crop {
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: #000;
+  color: #fff;
+  flex-direction: column;
+}
+
+dialog.topo-upload-crop[open] {
+  display: flex;
+}
+
+dialog.topo-upload-crop::backdrop {
+  background: #000;
+}
+
+.topo-upload-crop-photo {
+  position: relative;
+  display: grid;
+  flex: 1;
+  place-items: center;
+  min-height: 0;
+  margin: calc(16px + env(safe-area-inset-top)) 16px 8px;
+}
+
+.topo-upload-crop-frame {
+  position: relative;
+  touch-action: none;
+}
+
+.topo-upload-crop-frame img,
+.topo-upload-crop-frame svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.topo-upload-crop-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 16px calc(16px + env(safe-area-inset-bottom));
+}
+
+.topo-upload-crop-actions .action:first-child {
+  margin-right: auto;
+}
+
+/* ---------- Topo 實驗室（/topo-lab） ---------- */
+.topo-lab {
+  --catalog-col: 0px;
+}
+
+.topo-lab-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.topo-lab-photos {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+}
+
+.topo-lab-photos .chip {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.topo-lab-photos .chip.active {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.topo-lab-modes {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.topo-lab-transform-wrapper {
+  width: 100% !important;
+  height: 100% !important;
+  touch-action: none;
+}
+
+.topo-lab-transform-content {
+  width: 100% !important;
+}
+
+.topo-lab-panel {
+  padding: 12px;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  overflow-y: auto;
+}
+
+.topo-lab-json {
   display: flex;
   flex-direction: column;
-  margin-bottom: 8px;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
 }
 
-.topo-sheet-menu button {
-  min-height: 48px;
-  padding: 0 4px;
-  border: 0;
-  border-bottom: 1px solid var(--border);
-  background: transparent;
+.topo-lab-json textarea {
+  width: 100%;
+  font-family: monospace;
+  font-size: 0.75rem;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
   color: var(--text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
+  resize: vertical;
 }
 
-.topo-sheet-menu button:disabled {
-  opacity: 0.4;
-  cursor: default;
+.topo-lab-json-actions {
+  display: flex;
+  gap: 8px;
 }
+
