@@ -8,6 +8,7 @@ import type { Route, RouteType } from '../data/schema'
 import { localName, useLang } from '../i18n'
 import { BEST_STYLES, bestStyle, checklistStyle, isSent, sentRouteIds } from '../personal/model'
 import { setBest, usePersonal } from '../personal/store'
+import { SEND_SHORT } from '../personal/stats'
 import { useCloud } from '../personal/sync'
 import { href } from '../router'
 import { useHorizontalSwipe } from '../swipeGesture'
@@ -21,9 +22,6 @@ const ALL = 'all'
 const TYPES_KEY = 'longdong.checklist.types'
 
 type Style = (typeof BEST_STYLES)[number]
-
-/** 清單上的簡寫與顏色（CSS 的 .style-os 等） */
-const SHORT: Record<Style, string> = { onsight: 'OS', redpoint: 'RP', toprope: 'TR' }
 
 function load(key: string): string | undefined {
   try {
@@ -116,7 +114,7 @@ export function ChecklistPage({ data }: { data: LoadedData }) {
       <p className="checklist-legend small">
         {BEST_STYLES.map((s) => (
           <span key={s}>
-            <span className={`style-tag style-${SHORT[s].toLowerCase()}`}>{SHORT[s]}</span>
+            <span className={`style-tag style-${SEND_SHORT[s].toLowerCase()}`}>{SEND_SHORT[s]}</span>
             {t(`checklist.legend.${s}`)}
           </span>
         ))}
@@ -235,13 +233,13 @@ function AreaStats({
               </span>
               <span className="checklist-stats-bar" aria-hidden>
                 {BEST_STYLES.map((s) => (
-                  <span key={s} className={`style-${SHORT[s].toLowerCase()}`} style={{ width: share(count[s]) }} />
+                  <span key={s} className={`style-${SEND_SHORT[s].toLowerCase()}`} style={{ width: share(count[s]) }} />
                 ))}
                 <span className="other" style={{ width: share(other) }} />
               </span>
               {done > 0 && (
                 <span className="checklist-stats-styles small" aria-hidden>
-                  {BEST_STYLES.map((s) => (count[s] ? <span key={s} className={`style-${SHORT[s].toLowerCase()}`}>{`${SHORT[s]} ${count[s]}`}</span> : null))}
+                  {BEST_STYLES.map((s) => (count[s] ? <span key={s} className={`style-${SEND_SHORT[s].toLowerCase()}`}>{`${SEND_SHORT[s]} ${count[s]}`}</span> : null))}
                 </span>
               )}
             </button>
@@ -297,12 +295,12 @@ function ChecklistRow({ route, onError }: { route: Route; onError: (message: str
         <button
           key={s}
           type="button"
-          className={`checklist-style style-${SHORT[s].toLowerCase()}${chosen === s ? ' on' : fromLog === s ? ' from-log' : ''}`}
+          className={`checklist-style style-${SEND_SHORT[s].toLowerCase()}${chosen === s ? ' on' : fromLog === s ? ' from-log' : ''}`}
           aria-pressed={chosen === s}
           title={fromLog === s ? t('checklist.fromLog', { style: t(`style.${s}`) }) : t(`style.${s}`)}
           onClick={() => choose(s)}
         >
-          {SHORT[s]}
+          {SEND_SHORT[s]}
         </button>
       ))}
     </div>

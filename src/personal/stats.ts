@@ -4,6 +4,9 @@ import { BEST_STYLES, bestStyle, checklistStyle, isSent, type BestStyle, type Ti
 /** 完攀方式（與路線清單相同的三種）：OS、RP、TR */
 export type SendStyle = (typeof BEST_STYLES)[number]
 
+/** 清單上的簡寫（顏色見 CSS 的 .style-os 等） */
+export const SEND_SHORT: Record<SendStyle, string> = { onsight: 'OS', redpoint: 'RP', toprope: 'TR' }
+
 /** 每條完攀過的路線最好的方式：攀登紀錄（嘗試不算）加上路線清單；Flash 算 RP、跟攀算 TR */
 export function sendStyles(ticks: Tick[], best: Map<string, BestStyle>): Map<string, SendStyle> {
   const styles = new Map<string, Tick['style'][]>()
