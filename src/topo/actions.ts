@@ -1,20 +1,24 @@
 import { withCloud } from '../personal/sync'
 import { t } from '../i18n'
-import { encodeMarks, isFullCrop, MAX_EDGE, type Crop, type Marks, type TopoPhoto } from './model'
+import { encodeMarks, FULL_CROP, isFullCrop, MAX_EDGE, SCALE, type Crop, type Marks, type TopoPhoto } from './model'
 import { loadEdits, loadPhotos } from './store'
 
-/** 縮到長邊不超過 MAX_EDGE，輸出 WebP（瀏覽器不支援時為 JPEG）；照片的方向依 EXIF 轉正 */
-async function shrink(file: File): Promise<{ blob: Blob; width: number; height: number }> {
+/** 裁切（crop：萬分比，沒給是整張）、縮到長邊不超過 MAX_EDGE，輸出 WebP（瀏覽器不支援時為 JPEG）；照片的方向依 EXIF 轉正 */
+async function shrink(file: File, crop: Crop = FULL_CROP): Promise<{ blob: Blob; width: number; height: number }> {
   const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' }).catch(() => {
     throw new Error(t('topo.notImage'))
   })
-  const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height))
-  const width = Math.round(bitmap.width * scale)
-  const height = Math.round(bitmap.height * scale)
+  const sx = (crop.x / SCALE) * bitmap.width
+  const sy = (crop.y / SCALE) * bitmap.height
+  const sw = (crop.w / SCALE) * bitmap.width
+  const sh = (crop.h / SCALE) * bitmap.height
+  const scale = Math.min(1, MAX_EDGE / Math.max(sw, sh))
+  const width = Math.round(sw * scale)
+  const height = Math.round(sh * scale)
   const canvas = document.createElement('canvas')
   canvas.width = width
   canvas.height = height
-  canvas.getContext('2d')!.drawImage(bitmap, 0, 0, width, height)
+  canvas.getContext('2d')!.drawImage(bitmap, sx, sy, sw, sh, 0, 0, width, height)
   bitmap.close()
   const encode = (type: string) => new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, 0.85))
   // 不支援 WebP 的瀏覽器會改輸出 PNG，這時改用 JPEG
@@ -24,10 +28,10 @@ async function shrink(file: File): Promise<{ blob: Blob; width: number; height: 
   return { blob, width, height }
 }
 
-/** 上傳照片到分區，回傳照片 id */
-export async function uploadTopo(sector: string, file: File): Promise<string> {
+/** 上傳照片到分區（先裁切成 crop），回傳照片 id */
+export async function uploadTopo(sector: string, file: File, crop?: Crop): Promise<string> {
   const { m, uid } = await withCloud()
-  const { blob, width, height } = await shrink(file)
+  const { blob, width, height } = await shrink(file, crop)
   const id = await m.createTopo(uid, sector, blob, width, height)
   await loadPhotos(true)
   return id

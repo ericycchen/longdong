@@ -19,6 +19,9 @@ const STEP = 1.5
 export const DRAG_PX = 5
 /** 編輯用：在照片上按住不動超過這個時間（毫秒），接著拖曳就是平移 */
 const LONG_PRESS_MS = 350
+/** 手指點兩下：兩次放開相隔不超過這個時間（毫秒）、距離不超過 DOUBLE_TAP_PX，回到原尺寸 */
+const DOUBLE_TAP_MS = 350
+const DOUBLE_TAP_PX = 30
 
 /**
  * 編輯用的縮放區（電腦版）：滾輪或 +／- 縮放（以游標位置為中心）、0 回到整張；
@@ -32,6 +35,7 @@ const LONG_PRESS_MS = 350
  * holding：回傳 true 時手指按住的拖曳留給外面（手機版編輯按住瞄準加點），不平移。
  * focus：換一個值（seq）就平滑地縮放到那一塊（照片上的比例 0–1）；那一塊已經整個看得到、放得夠大時不動。
  * aspect（手機版編輯）：縮放區撐滿外面的空間，照片（這個寬高比）置中縮到放得下；放大後照片可以佔滿整個縮放區。
+ * 編輯時手指點兩下回到原尺寸，接著呼叫 onDoubleTap（第一下若加了點，由外面收回）；第二下不當作點了一下。
  */
 export function ZoomPane({
   children,
@@ -39,12 +43,14 @@ export function ZoomPane({
   holding,
   focus,
   aspect,
+  onDoubleTap,
 }: {
   children: (zoom: number) => ReactNode
   viewing?: boolean
   holding?: () => boolean
   focus?: ZoomFocus
   aspect?: number
+  onDoubleTap?: () => void
 }) {
   const { t } = useLang()
   const box = useRef<HTMLDivElement>(null)
@@ -66,6 +72,8 @@ export function ZoomPane({
   const onHandle = useRef(false)
   /** 螢幕上的手指（只在編輯時追蹤）；兩根以上就是捏合 */
   const touches = useRef(new Map<number, Pt>())
+  /** 上一次手指點一下（放開的時間、位置）：再點一下就是點兩下 */
+  const lastTap = useRef<{ at: number; p: Pt } | null>(null)
 
   useLayoutEffect(() => {
     const el = box.current!
@@ -225,6 +233,18 @@ export function ZoomPane({
   }
   const endPan = (e: ReactPointerEvent) => {
     touches.current.delete(e.pointerId)
+    if (e.pointerType === 'touch' && !viewing && press.current && !dragged.current && !armed.current && touches.current.size === 0) {
+      const p = rel(e)
+      const prev = lastTap.current
+      if (prev && e.timeStamp - prev.at < DOUBLE_TAP_MS && Math.hypot(p.x - prev.p.x, p.y - prev.p.y) < DOUBLE_TAP_PX) {
+        lastTap.current = null
+        dragged.current = true
+        setGliding(true)
+        setTimeout(() => setGliding(false), 350)
+        setView(IDENTITY)
+        onDoubleTap?.()
+      } else lastTap.current = { at: e.timeStamp, p }
+    }
     pan.current = null
     press.current = null
     clearTimeout(longTimer.current)

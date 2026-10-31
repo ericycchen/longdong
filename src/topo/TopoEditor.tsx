@@ -256,7 +256,7 @@ function RouteReveal({ photo, line, width }: { photo: TopoPhoto; line: Point[]; 
   )
 }
 
-/** 從下方滑出的面板（更多、路線清單）：點外面關閉；也是 dialog，返回手勢、Esc 先關這個，不會關掉整個編輯器 */
+/** 從下方滑出的面板（路線清單）：點外面關閉；也是 dialog，返回手勢、Esc 先關這個，不會關掉整個編輯器 */
 function Sheet({ label, onClose, children }: { label: string; onClose: () => void; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null)
   useEffect(() => ref.current!.showModal(), [])
@@ -415,8 +415,8 @@ function Editor({
   const [saved, setSaved] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
-  /** 手機版從下方滑出的面板 */
-  const [sheet, setSheet] = useState<'more' | 'routes'>()
+  /** 手機版從下方滑出的路線清單 */
+  const [sheet, setSheet] = useState<'routes'>()
   const [gray, toggleGray] = useGrayBase()
   /** 手機版：放大鏡（按住瞄準、拖曳點時） */
   const [loupe, setLoupe] = useState<LoupeState>()
@@ -620,8 +620,11 @@ function Editor({
   }
 
   /** 在這個位置加一個點（畫線）或放目前位置的 bolt */
+  /** 手機版：剛剛點一下加了點、放了 bolt 的時間；接著點兩下（回到原尺寸）時收回這一個 */
+  const tapped = useRef(0)
   const placeAt = (p: Point) => {
     if (!selected) return
+    tapped.current = performance.now()
     if (mode === 'line') editMarks((all) => addLinePoint(all, selected, p, photo.width / photo.height))
     else if (mode === 'bolt' && placing) {
       edit((m) => ({ ...m, bolts: { ...m.bolts, [placing]: p } }))
@@ -945,7 +948,15 @@ function Editor({
   )
 
   const photoPane = (
-    <ZoomPane holding={() => !!aim.current?.on} focus={focus} aspect={onClose ? fitAspect : undefined}>
+    <ZoomPane
+      holding={() => !!aim.current?.on}
+      focus={focus}
+      aspect={onClose ? fitAspect : undefined}
+      onDoubleTap={() => {
+        if (performance.now() - tapped.current < 500) undoOnce()
+        tapped.current = 0
+      }}
+    >
       {(zoom) => (
         <TopoFrame
           photo={photo}
@@ -1051,10 +1062,9 @@ function Editor({
       setBoltPos(undefined)
       zoomToRoute(selected)
     }
-    /** 返回手勢：一次退一層（更多、預覽、分岔、裁切、畫線／放 bolt、選取的點），都沒有才關閉編輯器 */
+    /** 返回手勢：一次退一層（路線清單、分岔、畫線／放 bolt、選取的點），都沒有才關閉編輯器 */
     const backStep = () => {
       if (sheet) setSheet(undefined)
-      else if (preview) setPreview(undefined)
       else if (isForking) setForking(false)
       else if (mode !== 'select') done()
       else if (pickedLive) setPicked(undefined)
@@ -1074,51 +1084,38 @@ function Editor({
         {!opts.iconOnly && <span>{label}</span>}
       </button>
     )
-    const trash = <Icon d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
-    const check = <Icon d="m5 12 5 5L20 7" />
-    const deleteButton = float(t('topo.deletePoint'), removePicked, { icon: trash, iconOnly: true, disabled: !pickedLive })
-    // 照片右下角的浮動按鈕：只放現在用得到的
-    const floating = preview ? null : cropping ? (
-      <>
-        {float(t('topo.cropReset'), () => setCrop({ x: 0, y: 0, w: 10000, h: 10000 }, true), { disabled: isFullCrop(crop) })}
-        {float(t('topo.cropDone'), () => setMode('select'), { icon: check, primary: true })}
-      </>
-    ) : isForking ? (
+    // 下面只有一層，只放手機修改要用的：左邊選工具（畫線、Bolt；再按一次結束），右邊復原、刪除選到的點、畫線時從其他路線分岔
+    const startLine = () => {
+      setMode('line')
+      setPicked(undefined)
+      // 繼續畫：放大到最後一點附近
+      const last = current.line?.at(-1)
+      if (last) zoomToPoint(last)
+    }
+    const startBolt = () => {
+      setMode('bolt')
+      zoomToRoute(selected)
+    }
+    const modeButton = (label: string, on: boolean, start: () => void, icon: ReactNode, disabled: boolean) => (
+      <button type="button" aria-pressed={on} disabled={disabled} onClick={on ? done : start}>
+        {icon}
+        <span>{label}</span>
+      </button>
+    )
+    const floating = isForking ? (
       <>
         <span className="topo-float-note">{t('topo.forkPick')}</span>
         {float(t('action.cancel'), () => setForking(false))}
       </>
-    ) : mode === 'line' ? (
-      <>
-        {deleteButton}
-        {float(t('topo.undoPoint'), () => edit((m) => ({ ...m, line: m.line?.slice(0, -1) })), { icon: undoIcon, iconOnly: true, disabled: !current.line?.length })}
-        {float(t('topo.done'), done, { icon: check, primary: true })}
-      </>
-    ) : mode === 'bolt' ? (
-      float(t('topo.done'), done, { icon: check, primary: true })
     ) : (
       <>
-        {deleteButton}
-        {float(
-          'Bolt',
-          () => {
-            setMode('bolt')
-            zoomToRoute(selected)
-          },
-          { icon: <Icon d="M9 3h6l3 7-6 11-6-11zM12 8.5v.01" />, iconOnly: true, disabled: positions.length === 0 },
+        {mode === 'line' && canFork && float(t('topo.fork'), () => setForking(true), { icon: <Icon d="M6 3v18M6 15a9 9 0 0 0 9-9M18 6a3 3 0 1 0-6 0 3 3 0 0 0 6 0" />, iconOnly: true })}
+        {float(t('topo.undo'), undoOnce, { icon: undoIcon, iconOnly: true, disabled: undo.current.length === 0 })}
+        {pickedLive && (
+          <button type="button" className="topo-float-btn danger" aria-label={t('topo.deletePoint')} title={t('topo.deletePoint')} onClick={removePicked}>
+            <Icon d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+          </button>
         )}
-        {float(
-          current.line?.length ? t('topo.continueLine') : t('topo.drawLine'),
-          () => {
-            setMode('line')
-            setPicked(undefined)
-            // 繼續畫：放大到最後一點附近
-            const last = current.line?.at(-1)
-            if (last) zoomToPoint(last)
-          },
-          { icon: <Icon d="M4 20l4-1L19 8l-3-3L5 16zM14 7l3 3" />, iconOnly: true, primary: true, disabled: !route },
-        )}
-        {float(t('route.actionsMore'), () => setSheet('more'), { icon: <Icon d="M5 12h.01M12 12h.01M19 12h.01" />, iconOnly: true })}
       </>
     )
     return (
@@ -1149,67 +1146,32 @@ function Editor({
               className={`topo-round primary topo-phone-submit${busy ? ' busy' : ''}`}
               aria-label={busy ? t('topo.submitting') : saved && !changed ? t('topo.saved') : t('topo.submit')}
               title={t('topo.submit')}
-              disabled={!changed || needRoute || busy || !!preview}
+              disabled={!changed || needRoute || busy}
               onClick={() => void submit()}
             >
               <Icon d="m5 12 5 5L20 7" />
             </button>
           </div>
-          {(preview || status) && (
+          {status && (
             <div className="topo-phone-notice">
-              {preview ? (
-                <div className="topo-edit-bar notice">
-                  <span>{t('topo.previewing', { time: relativeTime(new Date(preview.createdAt).toISOString(), t), name: displayName(profiles, preview.uid) })}</span>
-                  <button className="action" onClick={restorePreview}>
-                    {t('topo.restore')}
-                  </button>
-                  <button className="action" onClick={() => setPreview(undefined)}>
-                    {t('topo.backToEditing')}
-                  </button>
-                </div>
-              ) : (
-                <p className="topo-phone-status" role="status">
-                  {status}
-                </p>
-              )}
+              <p className="topo-phone-status" role="status">
+                {status}
+              </p>
             </div>
           )}
           {loupe && <Loupe photo={photo} loupe={loupe} line={current.line} kind={selected && info?.get(selected)?.kind} />}
-          {mode === 'bolt' && !preview && <div className="topo-float-chips">{positionsRow}</div>}
-          {floating && (
-            <div className="topo-float" role="toolbar" aria-label={t('topo.toolbar')}>
-              {floating}
-            </div>
-          )}
+          {mode === 'bolt' && <div className="topo-float-chips">{positionsRow}</div>}
+          <div className="topo-modes" role="group" aria-label={t('topo.tools')}>
+            {modeButton(t('topo.drawLine'), mode === 'line', startLine, <Icon d="M4 20l4-1L19 8l-3-3L5 16zM14 7l3 3" />, !route || isForking)}
+            {modeButton('Bolt', mode === 'bolt', startBolt, <Icon d="M9 3h6l3 7-6 11-6-11zM12 8.5v.01" />, positions.length === 0 || isForking)}
+          </div>
+          <div className="topo-float" role="toolbar" aria-label={t('topo.toolbar')}>
+            {floating}
+          </div>
         </div>
         {sheet === 'routes' && (
           <Sheet label={t('topo.chooseRoute')} onClose={() => setSheet(undefined)}>
             <div className="topo-phone-list">{routeList(() => setSheet(undefined))}</div>
-          </Sheet>
-        )}
-        {sheet === 'more' && (
-          <Sheet label={t('route.actionsMore')} onClose={() => setSheet(undefined)}>
-            <div className="topo-sheet-menu">
-              <button type="button" disabled={undo.current.length === 0} onClick={undoOnce}>
-                {t('topo.undo')}
-              </button>
-              <button type="button" disabled={redo.current.length === 0} onClick={redoOnce}>
-                {t('topo.redo')}
-              </button>
-              <button type="button" disabled={!canFork} onClick={() => (setForking(true), setSheet(undefined))}>
-                {t('topo.fork')}
-              </button>
-              <button type="button" onClick={() => (setMode('crop'), setSheet(undefined))}>
-                {t('topo.modeCrop')}
-              </button>
-              <button type="button" disabled={!route || !marks[route.id]} onClick={() => (edit(() => ({})), setSheet(undefined))}>
-                {t('topo.clearThisRoute')}
-              </button>
-              <button type="button" disabled={!draft || busy} onClick={() => (discard(), setSheet(undefined))}>
-                {t('topo.discard')}
-              </button>
-            </div>
-            {history(() => setSheet(undefined))}
           </Sheet>
         )}
       </PhoneShell>

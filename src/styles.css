@@ -5656,7 +5656,7 @@ html {
 /* ---------- Topo 編輯：手機版（整個畫面，src/topo/TopoEditor.tsx 的 PhoneShell） ---------- */
 
 /* 照片固定滿版，控制都浮在照片上（和 Climbio 的定線畫面同一套）：
-   上面一排是 46px 的深色半透明圓鈕（關閉、底色切換、提交），左邊接著目前的路線；右下是工具，左下是倍率；路線清單從下方滑出 */
+   上面一排是 46px 的深色半透明圓鈕（關閉、底色切換、提交），左邊接著目前的路線；下面只有一層：左邊選工具、右邊復原與刪除點；路線清單從下方滑出 */
 dialog.topo-phone {
   width: 100%;
   max-width: none;
@@ -5871,27 +5871,8 @@ dialog.topo-phone::backdrop {
   flex: none;
 }
 
-/* 手機用雙指縮放：只留倍率（點了回到整張），在左下；上面是關閉、提交，右下是工具 */
+/* 手機用雙指縮放、點兩下回到原尺寸：不顯示縮放按鈕與倍率 */
 .topo-phone .topo-zoom-controls {
-  top: auto;
-  right: auto;
-  bottom: calc(16px + env(safe-area-inset-bottom));
-  left: 12px;
-  padding: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.topo-phone .topo-zoom-fit {
-  height: var(--topo-btn);
-  min-width: var(--topo-btn);
-  padding: 0 12px;
-  border-radius: 999px;
-  background: rgba(14, 14, 15, 0.55);
-  color: #fff;
-}
-
-.topo-phone .topo-zoom-controls button:not(.topo-zoom-fit) {
   display: none;
 }
 
@@ -5905,7 +5886,7 @@ dialog.topo-phone::backdrop {
   justify-content: flex-end;
   align-items: center;
   gap: var(--topo-gap);
-  max-width: calc(100% - 24px);
+  max-width: calc(100% - 210px);
   pointer-events: none;
 }
 
@@ -5942,6 +5923,53 @@ dialog.topo-phone::backdrop {
 .topo-float-btn.primary {
   background: var(--brand);
   color: var(--on-brand);
+}
+
+.topo-float-btn.danger {
+  color: #ff4d4d;
+}
+
+/* 左下選工具（和 Climbio 定線的類型膠囊同一套）：畫線、Bolt，選中的鋪品牌色，再按一次結束 */
+.topo-modes {
+  position: absolute;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  left: 12px;
+  z-index: 3;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(14, 14, 15, 0.6);
+}
+
+.topo-modes button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: calc(var(--topo-btn) - 8px);
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.topo-modes button svg {
+  width: 20px;
+  height: 20px;
+}
+
+.topo-modes button[aria-pressed='true'] {
+  background: var(--brand);
+  color: var(--on-brand);
+}
+
+.topo-modes button:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .topo-float-btn:disabled {
@@ -6039,7 +6067,7 @@ dialog.topo-phone::backdrop {
   padding: 24px;
 }
 
-/* 「更多」從下方滑出：復原、重做、分岔、裁切、清除、捨棄、修改記錄 */
+/* 路線清單從下方滑出 */
 dialog.topo-sheet-backdrop {
   width: 100%;
   max-width: none;
@@ -6070,25 +6098,61 @@ dialog.topo-sheet-backdrop::backdrop {
   background: var(--surface);
 }
 
-.topo-sheet-menu {
-  display: flex;
-  flex-direction: column;
-  margin-bottom: 8px;
-}
+/* ---------- 新增 Topo 照片：上傳前先裁切（src/topo/TopoUpload.tsx） ---------- */
 
-.topo-sheet-menu button {
-  min-height: 48px;
-  padding: 0 4px;
+/* 整個畫面：照片盡量大、置中，下面一排取消、整張照片、上傳 */
+dialog.topo-upload-crop {
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 0;
   border: 0;
-  border-bottom: 1px solid var(--border);
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
+  background: #000;
+  color: #fff;
+  flex-direction: column;
 }
 
-.topo-sheet-menu button:disabled {
-  opacity: 0.4;
-  cursor: default;
+dialog.topo-upload-crop[open] {
+  display: flex;
+}
+
+dialog.topo-upload-crop::backdrop {
+  background: #000;
+}
+
+.topo-upload-crop-photo {
+  position: relative;
+  display: grid;
+  flex: 1;
+  place-items: center;
+  min-height: 0;
+  margin: calc(16px + env(safe-area-inset-top)) 16px 8px;
+}
+
+.topo-upload-crop-frame {
+  position: relative;
+  touch-action: none;
+}
+
+.topo-upload-crop-frame img,
+.topo-upload-crop-frame svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.topo-upload-crop-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 16px calc(16px + env(safe-area-inset-bottom));
+}
+
+.topo-upload-crop-actions .action:first-child {
+  margin-right: auto;
 }
