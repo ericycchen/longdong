@@ -46,7 +46,20 @@ const baseWallLines = [...baseWalls.values()].reduce((a, b) => a + b, 0)
 /** 校門口範圍裡的一個位置（areas.geojson 的一塊的中間） */
 const AT = { lat: 25.11272, lng: 121.92216 }
 
-const server = await preview({ build: { outDir: 'dist-e2e' }, preview: { port: 4220, strictPort: true }, logLevel: 'silent' })
+// 和 Firebase Hosting 一樣（cleanUrls）：/index.html 轉址到 /
+const cleanUrls = {
+  name: 'clean-urls',
+  configurePreviewServer(server: { middlewares: { use: (fn: (req: { url?: string }, res: { statusCode: number; setHeader: (k: string, v: string) => void; end: () => void }, next: () => void) => void) => void } }) {
+    server.middlewares.use((req, res, next) => {
+      const m = req.url?.match(/^\/index\.html(\?.*)?$/)
+      if (!m) return next()
+      res.statusCode = 301
+      res.setHeader('Location', `/${m[1] ?? ''}`)
+      res.end()
+    })
+  },
+}
+const server = await preview({ build: { outDir: 'dist-e2e' }, preview: { port: 4220, strictPort: true }, logLevel: 'silent', plugins: [cleanUrls] })
 const base = server.resolvedUrls!.local[0]
 const browser = await chromium.launch({ channel: process.env.BROWSER_CHANNEL ?? 'msedge', headless: true })
 const logs: string[] = []
@@ -136,6 +149,22 @@ async function submitMap(page: Page) {
 }
 
 try {
+  // ── 0. 離線快取（Service Worker）裡沒有首頁時打開路線頁：從網路讀，不會出現「無法連上這個網站」──
+  {
+    const ctx = await browser.newContext({ locale: 'zh-TW' })
+    const page = await ctx.newPage()
+    await page.goto(base)
+    await page.evaluate(async () => void (await navigator.serviceWorker.ready))
+    await page.reload()
+    await until(() => page.evaluate(() => !!navigator.serviceWorker.controller))
+    await page.evaluate(async () => {
+      for (const k of await caches.keys()) await caches.delete(k)
+    })
+    const opened = await page.goto(new URL('route/longdong/e2e', base).href).then((r) => r?.status() ?? 0, (e: Error) => e.message.split('\n')[0])
+    check('離線快取被清掉後打開路線頁：正常打開（不是 ERR_FAILED）', opened === 200 && (await page.locator('#root').count()) === 1, String(opened))
+    await ctx.close()
+  }
+
   // ── 1. 回報 → 去識別副本（沒登入的裝置） ─────────────────────────────
   // 前一支測試（e2e-report.ts）已經有一筆登入的回報的副本：這裡只看新增的
   const existing = await pins()
