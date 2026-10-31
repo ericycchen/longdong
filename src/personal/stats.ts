@@ -7,6 +7,15 @@ export type SendStyle = (typeof BEST_STYLES)[number]
 /** 清單上的簡寫（顏色見 CSS 的 .style-os 等） */
 export const SEND_SHORT: Record<SendStyle, string> = { onsight: 'OS', redpoint: 'RP', toprope: 'TR' }
 
+/** 一條路線最好的完攀方式；沒有完攀過時是 undefined */
+export function sendStyle(ticks: Tick[], best: Map<string, BestStyle>, routeId: string): SendStyle | undefined {
+  const style = best.get(routeId)
+  return sendStyles(
+    ticks.filter((t) => t.routeId === routeId),
+    new Map(style ? [[routeId, style]] : []),
+  ).get(routeId)
+}
+
 /** 每條完攀過的路線最好的方式：攀登紀錄（嘗試不算）加上路線清單；Flash 算 RP、跟攀算 TR */
 export function sendStyles(ticks: Tick[], best: Map<string, BestStyle>): Map<string, SendStyle> {
   const styles = new Map<string, Tick['style'][]>()

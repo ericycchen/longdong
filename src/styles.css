@@ -648,7 +648,8 @@ a.action {
   display: grid;
   grid-template-columns: 3.4em 1fr auto;
   gap: 10px;
-  align-items: center;
+  /* 編號、名稱、難度的第一行對齊 */
+  align-items: first baseline;
   padding: 12px 14px;
   min-height: 60px;
   color: var(--text);
@@ -660,6 +661,9 @@ a.action {
 }
 
 .route-no {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
   font-variant-numeric: tabular-nums;
   color: var(--faint);
   font-size: 0.8rem;
@@ -2286,7 +2290,7 @@ a.action {
 }
 
 .route-table {
-  --rt-cols: 3.4rem minmax(0, 1fr) 4.4rem 6.8rem 2.8rem 3.8rem;
+  --rt-cols: 3.4rem minmax(0, 1fr) 4.4rem 6.8rem 4.8rem 3.8rem;
   container-type: inline-size;
 }
 
@@ -2348,7 +2352,7 @@ a.action {
 @container (max-width: 560px) {
   .rt-head,
   .rt-row {
-    grid-template-columns: 3.2rem minmax(0, 1fr) 4.4rem 2.8rem 3.8rem;
+    grid-template-columns: 3.2rem minmax(0, 1fr) 4.4rem 4.8rem 3.8rem;
   }
 
   .rt-head > :nth-child(4),
@@ -2364,6 +2368,10 @@ a.action {
 .rt-row .type {
   font-size: 0.78rem;
   color: var(--muted);
+}
+
+.rt-row .route-status {
+  font-size: 0.78rem;
 }
 
 /* ---------- 我的：寬度夠時統計在左、紀錄在右（不夠時自動換行成單欄，手機版不變） ---------- */
@@ -3409,23 +3417,54 @@ main.map > div {
 }
 
 .route-row-facts {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin-top: 2px;
   color: var(--muted);
   font-size: 0.75rem;
+  white-space: nowrap;
 }
 
-.route-flag {
-  display: block;
-  font-size: 0.75rem;
-  font-weight: 700;
+.route-row-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.route-flag.warn {
-  color: #b77800;
+/* 清單裡的小心、危險：和種類同一行、同字級 */
+.route-row .route-status {
+  flex: none;
+  gap: 4px;
+  margin: 0;
+  line-height: 16px;
 }
 
-.route-flag.danger {
-  color: var(--danger);
+.route-row .route-status-icon {
+  width: 14px;
+  height: 14px;
+  font-size: 0.6rem;
+}
+
+/* 難度（沒有底色）在上、評分在下，靠右對齊 */
+.route-row-end {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+}
+
+.route-row-grade {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 自己的完攀方式：編號下面，顏色同路線清單（.style-os 等） */
+.send-tag {
+  color: var(--style);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
 }
 
 /* 標題卡裡名稱下面的重點：難度、長度、快扣、種類、評分 */

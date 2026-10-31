@@ -1,19 +1,20 @@
 import type { RouteRef } from '../data/dataset'
 import type { Route } from '../data/schema'
 import { typeText } from '../format'
-import { isSent } from '../personal/model'
+import { SEND_SHORT, sendStyle, type SendStyle } from '../personal/stats'
 import { usePersonal } from '../personal/store'
 import { useCloud } from '../personal/sync'
 import { routeKey, summarize } from '../social/model'
 import { useSocial } from '../social/store'
 import { useRouteLink } from '../router'
 import { localName, useLang } from '../i18n'
-import { GradePill } from './GradePill'
-import { SafetyLight } from './SafetyLight'
 import { StarsBadge } from './Stars'
 import { StatusBadge } from './StatusBadge'
 
-/** 路線清單的一列；table 為電腦版的表格欄位（與 RouteList 的欄位標題對齊） */
+/**
+ * 路線清單的一列：編號（下面是自己的完攀方式 OS／RP／TR）、名稱與種類、難度（沒有底色）與評分；
+ * 小心、危險（兩個字）接在種類後面。table 為電腦版的表格欄位（與 RouteList 的欄位標題對齊）
+ */
 export function RouteRow({ item, showPlace = false, table = false }: { item: RouteRef; showPlace?: boolean; table?: boolean }) {
   const { route, sector, area } = item
   const { lang, t } = useLang()
@@ -23,53 +24,50 @@ export function RouteRow({ item, showPlace = false, table = false }: { item: Rou
   const rating = summarize(useSocial().ratings[routeKey(route.id)])
   const favorite = signedIn && personal.favorites.has(route.id)
   const { link, selected } = useRouteLink()
-  const sent = signedIn && (personal.best.has(route.id) || personal.ticks.some((t) => t.routeId === route.id && isSent(t.style)))
+  const send = signedIn ? sendStyle(personal.ticks, personal.best, route.id) : undefined
 
   const selectedRow = selected === route.id
-  const nameCell = (
-    <span className="route-name">
-      <span className="zh">
-        {name.main}
-        {(favorite || sent) && (
-          <span className="marks">
-            {sent && (
-              <span title={t('mark.sent')} aria-label={t('mark.sent')}>
-                ✓
-              </span>
-            )}
-            {favorite && (
-              <span title={t('mark.fav')} aria-label={t('mark.fav')}>
-                ★
-              </span>
-            )}
-          </span>
-        )}
-      </span>
-      {name.sub && <span className="en">{name.sub}</span>}
-      {showPlace && (
-        <span className="place">
-          {localName(area.name, lang).main} · {localName(sector.name, lang).main}
+  const number = (
+    <span className="route-no">
+      {route.number ? `#${route.number}` : '—'}
+      {send && <SendTag style={send} />}
+    </span>
+  )
+  const zh = (
+    <span className="zh">
+      {name.main}
+      {favorite && (
+        <span className="marks" title={t('mark.fav')} aria-label={t('mark.fav')}>
+          ★
         </span>
       )}
     </span>
   )
+  const place = showPlace && (
+    <span className="place">
+      {localName(area.name, lang).main} · {localName(sector.name, lang).main}
+    </span>
+  )
+  const grade = route.grade && <span className="route-row-grade">{route.grade}</span>
 
   if (table) {
     return (
       <li>
         <a className={`route-row rt-row${selectedRow ? ' selected' : ''}`} href={link(route.id)} aria-current={selectedRow ? 'true' : undefined}>
-          <span className="route-no">{route.number ? `#${route.number}` : '—'}</span>
+          {number}
           <span className="rt-name">
-            {nameCell}
+            <span className="route-name">
+              {zh}
+              {name.sub && <span className="en">{name.sub}</span>}
+              {place}
+            </span>
             <span className="rt-type-inline">{typeText(route, t)}</span>
             {route.status && <StatusBadge status={route.status} compact />}
           </span>
           {/* 每一格都包一層，沒有內容時欄位也對齊 */}
-          <span>
-            <GradePill grade={route.grade} value={route.gradeValue} />
-          </span>
+          <span>{grade}</span>
           <span className="type">{typeText(route, t)}</span>
-          <span>{!route.isFixture && <SafetyLight safety={route.safety} />}</span>
+          <span>{!route.isFixture && <RouteFlag route={route} />}</span>
           <span>
             <StarsBadge summary={rating} />
           </span>
@@ -78,60 +76,52 @@ export function RouteRow({ item, showPlace = false, table = false }: { item: Rou
     )
   }
 
-  // 手機版：編號、名稱、難度；名稱下面一行種類、快扣數、高度（傳攀還是運攀、要帶幾把快扣）；
-  // 黃燈、紅燈、待移除、封閉時再加一行提醒（其他資訊在路線頁）
+  // 手機版：名稱下面一行種類、快扣數、高度（傳攀還是運攀、要帶幾把快扣），接著小心、危險；其他資訊在路線頁
   const facts = [typeText(route, t), route.heightM && `${route.heightM} m`].filter(Boolean).join(' · ')
   return (
     <li>
-      <a
-        className={`route-row${selectedRow ? ' selected' : ''}`}
-        href={link(route.id)}
-        aria-current={selectedRow ? 'true' : undefined}
-      >
-        <span className="route-no">{route.number ? `#${route.number}` : '—'}</span>
+      <a className={`route-row${selectedRow ? ' selected' : ''}`} href={link(route.id)} aria-current={selectedRow ? 'true' : undefined}>
+        {number}
         <span className="route-name">
-          <span className="zh">
-            {name.main}
-            {(favorite || sent) && (
-              <span className="marks">
-                {sent && (
-                  <span title={t('mark.sent')} aria-label={t('mark.sent')}>
-                    ✓
-                  </span>
-                )}
-                {favorite && (
-                  <span title={t('mark.fav')} aria-label={t('mark.fav')}>
-                    ★
-                  </span>
-                )}
-              </span>
-            )}
+          {zh}
+          {place}
+          <span className="route-row-facts">
+            {facts && <span className="route-row-text">{facts}</span>}
+            {!route.isFixture && <RouteFlag route={route} />}
           </span>
-          {showPlace && (
-            <span className="place">
-              {localName(area.name, lang).main} · {localName(sector.name, lang).main}
-            </span>
-          )}
-          {facts && <span className="route-row-facts">{facts}</span>}
-          {!route.isFixture && <RouteFlag route={route} />}
         </span>
-        <GradePill grade={route.grade} value={route.gradeValue} />
+        <span className="route-row-end">
+          {grade}
+          <StarsBadge summary={rating} />
+        </span>
       </a>
     </li>
   )
 }
 
-/** 需要注意的路線：黃燈「小心」、紅燈「危險」，待移除、封閉時接上狀態；其他不顯示 */
-export function RouteFlag({ route }: { route: Route }) {
-  const { lang, t } = useLang()
+/** 自己最好的完攀方式：OS、RP、TR（顏色同路線清單、難度金字塔） */
+function SendTag({ style }: { style: SendStyle }) {
+  const { t } = useLang()
+  const short = SEND_SHORT[style]
+  return (
+    <span className={`send-tag style-${short.toLowerCase()}`} title={t('mark.sent')} aria-label={`${t('mark.sent')} ${short}`}>
+      {short}
+    </span>
+  )
+}
+
+/** 需要注意的路線：黃燈「小心」、紅燈「危險」（待移除、封閉也是危險）；其他不顯示。alert：路線頁（危險時讀出來） */
+export function RouteFlag({ route, alert }: { route: Route; alert?: boolean }) {
+  const { t } = useLang()
   const closed = route.status === 'closed' || route.status === 'to-remove'
   const level = closed || route.safety === 'red' ? 'danger' : route.safety === 'yellow' ? 'warn' : undefined
   if (!level) return null
-  const status = closed ? (lang === 'zh' ? route.statusLabel : t(`status.${route.status!}`)) : undefined
   return (
-    <span className={`route-flag ${level}`}>
-      ● {t(level === 'danger' ? 'safety.red' : 'safety.yellow')}
-      {status && ` · ${status}`}
+    <span className={`route-status ${level}`} role={alert && level === 'danger' ? 'alert' : undefined}>
+      <span className="route-status-icon" aria-hidden>
+        !
+      </span>
+      {t(level === 'danger' ? 'safety.red' : 'safety.yellow')}
     </span>
   )
 }

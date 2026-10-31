@@ -3,6 +3,7 @@ import { BoltTable } from '../components/BoltTable'
 import { GradePill } from '../components/GradePill'
 import { PageHero } from '../components/PageHero'
 import { PersonalPanel } from '../components/PersonalPanel'
+import { RouteFlag } from '../components/RouteRow'
 import { ReviewsBar, type ReviewsSheet } from '../components/ReviewsSection'
 import { SafetyLight } from '../components/SafetyLight'
 import { TitleTools } from '../components/TitleTools'
@@ -70,7 +71,7 @@ export function RoutePage({ data, id, topoInList }: { data: LoadedData; id: stri
               {qd && <span>{t('type.quickdraws', { n: qd })}</span>}
               {(route.type || route.isFixture) && <span>{route.isFixture ? t('type.fixture') : typeLabel(route.type!, t)}</span>}
             </p>
-            {!route.isFixture && <RouteStatus route={route} />}
+            {!route.isFixture && <RouteFlag route={route} alert />}
           </>
         }
         tools={
@@ -144,24 +145,6 @@ type Level = 'ok' | 'warn' | 'danger' | 'unknown'
 function safetyLevel(route: Route): Level {
   const closed = route.status === 'closed' || route.status === 'to-remove'
   return closed || route.safety === 'red' ? 'danger' : route.safety === 'yellow' ? 'warn' : route.safety === 'green' ? 'ok' : 'unknown'
-}
-
-/**
- * 難度那一列的下一列：安全不是綠燈（小心、危險、封閉、待移除）時只寫「小心」或「危險」；
- * 正常、尚未評級的不顯示；狀態（封閉等）、日期、拉測在路線資料（RouteData）。
- */
-function RouteStatus({ route }: { route: Route }) {
-  const { t } = useLang()
-  const level = safetyLevel(route)
-  if (level === 'ok' || level === 'unknown') return null
-  return (
-    <p className={`route-status ${level}`} role={level === 'danger' ? 'alert' : undefined}>
-      <span className="route-status-icon" aria-hidden>
-        !
-      </span>
-      {t(level === 'danger' ? 'safety.red' : 'safety.yellow')}
-    </p>
-  )
 }
 
 type Rows = [string, ReactNode][]

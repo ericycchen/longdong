@@ -1696,6 +1696,20 @@ try {
   await rp.getByRole('menuitem', { name: '記錄攀登' }).click()
   await rp.locator('.tick-sheet button[type=submit]').click()
   await rp.waitForSelector('.sheet[open]', { state: 'detached' })
+  // 分區頁的路線清單：難度沒有底色；評分、小心／危險（兩個字）、自己的完攀方式（編號下面）
+  const listRow = (number?: string) => rp.locator('.route-list .route-row', { has: rp.locator('.route-no', { hasText: new RegExp(`^#${number}(OS|RP|TR)?$`) }) })
+  await rp.goto(base + `sector/${topoSector.id}`)
+  await rp.waitForSelector('.route-list .route-row-grade')
+  check('分區頁路線清單：難度沒有底色', (await rp.locator('.route-list .grade-pill').count()) === 0 && (await rp.locator('.route-list .route-row-grade').first().evaluate((el) => getComputedStyle(el).backgroundColor)) === 'rgba(0, 0, 0, 0)')
+  check('分區頁路線清單：有評分的路線顯示評分', /^★\d\.\d/.test((await listRow(topoRoutes[0].number).locator('.stars-badge').textContent()) ?? ''))
+  const sendTags = await rp.locator('.route-list .send-tag').allTextContents()
+  check('分區頁路線清單：記錄過的路線在編號下面標完攀方式（RP），其他沒有', sendTags.join() === 'RP' && (await listRow(topoRoutes[2].number).locator('.send-tag').textContent()) === 'RP', sendTags.join())
+  if (warn) {
+    await rp.goto(base + `sector/${data.areas.flatMap((a) => a.sectors).find((x) => x.routes.some((r) => r.id === warn.id))!.id}`)
+    await rp.waitForSelector('.route-list .route-status')
+    const flags = await rp.locator('.route-list .route-status').allTextContents()
+    check('分區頁路線清單：小心、危險只有兩個字', flags.length > 0 && flags.every((f) => ['!小心', '!危險'].includes(f)), flags.join('|'))
+  }
   await rp.goto(base)
   await rp.waitForSelector('.home-m .weather-now')
   check('首頁天氣：目前溫度、天氣與風', ((await rp.locator('.weather-now').textContent()) ?? '').replace(/\s+/g, '') === '23°毛毛雨風5m/s·陣風11·濕度90%', (await rp.locator('.weather-now').textContent()) ?? '')
