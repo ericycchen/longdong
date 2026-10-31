@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useIsAdmin } from '../admin'
 import { GradePill } from '../components/GradePill'
@@ -208,35 +208,55 @@ function CloseButton() {
   const { t } = useLang()
   const close = useContext(ShellClose)
   return (
-    <button type="button" className="topo-phone-close" aria-label={t('layout.close')} onClick={close}>
+    <button type="button" className="topo-round topo-phone-close" aria-label={t('layout.close')} onClick={close}>
       <Icon d="M6 6l12 12M18 6 6 18" />
     </button>
   )
 }
 
-/** 手機版的路線清單至少這麼高、照片區至少留這麼高（螢幕像素） */
-const MIN_LIST = 72
-const MIN_PHOTO = 160
+/** 手機版定線時照片的底色：灰階（選到的路線周圍保留原色、其他路線淡一點）或原色；記在這台裝置 */
+const GRAY_KEY = 'longdong.topoGray'
 
-/** 手機版照片與路線清單之間的分隔線：上下拖曳調整清單的高度 */
-function PaneSplit({ onResize }: { onResize: (height: number) => void }) {
-  const resize = (e: ReactPointerEvent<HTMLDivElement>) => {
-    const box = e.currentTarget.closest('dialog')!.getBoundingClientRect()
-    const top = e.currentTarget.previousElementSibling!.getBoundingClientRect().top
-    onResize(Math.max(MIN_LIST, Math.min(box.bottom - top - MIN_PHOTO, box.bottom - e.clientY)))
-  }
+function useGrayBase() {
+  const [gray, setGray] = useState(() => {
+    try {
+      return localStorage.getItem(GRAY_KEY) !== '0'
+    } catch {
+      return true
+    }
+  })
+  const toggle = () =>
+    setGray((on) => {
+      try {
+        localStorage.setItem(GRAY_KEY, on ? '0' : '1')
+      } catch {
+        // 存不了就只在這次有效
+      }
+      return !on
+    })
+  return [gray, toggle] as const
+}
+
+/**
+ * 灰階底上，選到的路線周圍疊回原色的照片：沿著線一條柔邊的帶子（幾層寬窄不同的半透明線疊出來，不用模糊濾鏡，縮放、拖曳時不吃效能）。
+ * width：帶子最寬的寬度（照片像素）。
+ */
+function RouteReveal({ photo, line, width }: { photo: TopoPhoto; line: Point[]; width: number }) {
+  const id = useId()
+  const d = smoothPath(line.map((p) => px(photo, p) as Pt))
   return (
-    <div
-      className="topo-split"
-      role="separator"
-      aria-orientation="horizontal"
-      onPointerDown={(e) => e.currentTarget.setPointerCapture(e.pointerId)}
-      onPointerMove={(e) => e.currentTarget.hasPointerCapture(e.pointerId) && resize(e)}
-    />
+    <g className="topo-reveal" aria-hidden>
+      <mask id={id} maskUnits="userSpaceOnUse" x={0} y={0} width={photo.width} height={photo.height}>
+        {[1, 0.7, 0.45].map((f) => (
+          <path key={f} d={d} fill="none" stroke="#fff" strokeOpacity={0.5} strokeWidth={width * f} strokeLinecap="round" strokeLinejoin="round" />
+        ))}
+      </mask>
+      <image href={imageUrl(photo.image)} x={0} y={0} width={photo.width} height={photo.height} mask={`url(#${id})`} />
+    </g>
   )
 }
 
-/** 從下方滑出的面板（更多）：點外面關閉；也是 dialog，返回手勢、Esc 先關這個，不會關掉整個編輯器 */
+/** 從下方滑出的面板（更多、路線清單）：點外面關閉；也是 dialog，返回手勢、Esc 先關這個，不會關掉整個編輯器 */
 function Sheet({ label, onClose, children }: { label: string; onClose: () => void; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null)
   useEffect(() => ref.current!.showModal(), [])
@@ -396,11 +416,8 @@ function Editor({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
   /** 手機版從下方滑出的面板 */
-  const [sheet, setSheet] = useState<'more'>()
-  /** 手機版：下面路線清單的高度（拖曳分隔線調整；undefined 是預設） */
-  const [listHeight, setListHeight] = useState<number>()
-  /** 手機版：照片佔滿整個畫面（路線清單收起來） */
-  const [photoOnly, setPhotoOnly] = useState(false)
+  const [sheet, setSheet] = useState<'more' | 'routes'>()
+  const [gray, toggleGray] = useGrayBase()
   /** 手機版：放大鏡（按住瞄準、拖曳點時） */
   const [loupe, setLoupe] = useState<LoupeState>()
   /** 手機版：自動縮放到的地方（選路線、選點、繼續畫、完成） */
@@ -939,8 +956,10 @@ function Editor({
           {(frameK) => {
             // 放大後線、點、把手維持相同的螢幕大小
             const k = frameK / zoom
+            const revealLine = onClose && gray && selected ? marks[selected]?.line : undefined
             return (
               <>
+                {revealLine && revealLine.length >= 2 && <RouteReveal photo={photo} line={revealLine} width={0.12 * px(photo, [(shownCrop ?? FULL_CROP).w, 0])[0]} />}
                 <TopoLines
                   photo={photo}
                   marks={marks}
@@ -1104,31 +1123,57 @@ function Editor({
     )
     return (
       <PhoneShell onClose={onClose} onBack={backStep} overlay={{ kind: 'topo', owner, photo: photo.id, selected }} label={t('topo.editTitle')}>
-        <div className="topo-phone-photo" style={{ '--fit-aspect': fitAspect } as CSSProperties}>
+        <div className={`topo-phone-photo${gray ? ' gray' : ''}`} style={{ '--fit-aspect': fitAspect } as CSSProperties}>
           <div className="topo-edit-photo" {...aimHandlers}>
             {photoPane}
           </div>
-          {/* 照片盡量大：關閉、提交浮在照片上面 */}
+          {/* 照片固定滿版，控制浮在上面（和 Climbio 的定線同一套）：左上關閉、旁邊是目前的路線（點了換路線），右上底色切換、提交 */}
           <div className="topo-phone-top">
             <CloseButton />
-            <button
-              type="button"
-              className="topo-float-btn topo-phone-full"
-              aria-label={t('topo.fullscreen')}
-              aria-pressed={photoOnly}
-              onClick={() => setPhotoOnly((v) => !v)}
-            >
-              <Icon d={photoOnly ? 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5' : 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5'} />
+            <button type="button" className="topo-phone-title" aria-haspopup="dialog" onClick={() => setSheet('routes')}>
+              {route ? (
+                <>
+                  <b>{route.number ?? '·'}</b>
+                  <span>{localName(route.name, lang).main}</span>
+                </>
+              ) : (
+                <span>{t('topo.chooseRoute')}</span>
+              )}
+              <Icon d="m6 9 6 6 6-6" />
+            </button>
+            <button type="button" className="topo-round topo-gray-btn" aria-pressed={gray} aria-label={t('topo.grayBase')} title={t('topo.grayBase')} onClick={toggleGray}>
+              <Icon d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 3v18M12 8h7M12 12h9M12 16h7" />
             </button>
             <button
               type="button"
-              className="topo-float-btn primary topo-phone-submit"
+              className={`topo-round primary topo-phone-submit${busy ? ' busy' : ''}`}
+              aria-label={busy ? t('topo.submitting') : saved && !changed ? t('topo.saved') : t('topo.submit')}
+              title={t('topo.submit')}
               disabled={!changed || needRoute || busy || !!preview}
               onClick={() => void submit()}
             >
-              {busy ? t('topo.submitting') : saved && !changed ? t('topo.saved') : t('topo.submit')}
+              <Icon d="m5 12 5 5L20 7" />
             </button>
           </div>
+          {(preview || status) && (
+            <div className="topo-phone-notice">
+              {preview ? (
+                <div className="topo-edit-bar notice">
+                  <span>{t('topo.previewing', { time: relativeTime(new Date(preview.createdAt).toISOString(), t), name: displayName(profiles, preview.uid) })}</span>
+                  <button className="action" onClick={restorePreview}>
+                    {t('topo.restore')}
+                  </button>
+                  <button className="action" onClick={() => setPreview(undefined)}>
+                    {t('topo.backToEditing')}
+                  </button>
+                </div>
+              ) : (
+                <p className="topo-phone-status" role="status">
+                  {status}
+                </p>
+              )}
+            </div>
+          )}
           {loupe && <Loupe photo={photo} loupe={loupe} line={current.line} kind={selected && info?.get(selected)?.kind} />}
           {mode === 'bolt' && !preview && <div className="topo-float-chips">{positionsRow}</div>}
           {floating && (
@@ -1137,26 +1182,11 @@ function Editor({
             </div>
           )}
         </div>
-        {!photoOnly && <PaneSplit onResize={setListHeight} />}
-        <div className="topo-phone-list" hidden={photoOnly} style={listHeight ? { height: listHeight } : undefined}>
-          {preview && (
-            <div className="topo-edit-bar notice">
-              <span>{t('topo.previewing', { time: relativeTime(new Date(preview.createdAt).toISOString(), t), name: displayName(profiles, preview.uid) })}</span>
-              <button className="action" onClick={restorePreview}>
-                {t('topo.restore')}
-              </button>
-              <button className="action" onClick={() => setPreview(undefined)}>
-                {t('topo.backToEditing')}
-              </button>
-            </div>
-          )}
-          {status && (
-            <p className="topo-phone-status warn-text" role="status">
-              {status}
-            </p>
-          )}
-          {routeList()}
-        </div>
+        {sheet === 'routes' && (
+          <Sheet label={t('topo.chooseRoute')} onClose={() => setSheet(undefined)}>
+            <div className="topo-phone-list">{routeList(() => setSheet(undefined))}</div>
+          </Sheet>
+        )}
         {sheet === 'more' && (
           <Sheet label={t('route.actionsMore')} onClose={() => setSheet(undefined)}>
             <div className="topo-sheet-menu">

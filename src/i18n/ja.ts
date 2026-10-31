@@ -619,6 +619,8 @@ export const ja: Messages = {
   'topo.empty': 'まだルートが記入されていません',
   'topo.edit': '編集',
   'topo.editTitle': 'トポを編集',
+  'topo.chooseRoute': 'ルートを選ぶ',
+  'topo.grayBase': 'モノクロ表示',
   'topo.toolbar': 'マーク用ツール',
   'topo.tools': 'ツール',
   'topo.undo': '元に戻す',

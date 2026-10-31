@@ -613,6 +613,8 @@ export const zh = {
   'topo.empty': '還沒有標記任何路線',
   'topo.edit': '編輯',
   'topo.editTitle': '編輯 Topo',
+  'topo.chooseRoute': '選路線',
+  'topo.grayBase': '灰階底色',
   'topo.toolbar': '標記工具',
   'topo.tools': '工具',
   'topo.undo': '復原',

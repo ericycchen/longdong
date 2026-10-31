@@ -616,6 +616,8 @@ export const en: Messages = {
   'topo.empty': 'No routes marked yet',
   'topo.edit': 'Edit',
   'topo.editTitle': 'Edit topo',
+  'topo.chooseRoute': 'Choose a route',
+  'topo.grayBase': 'Grayscale photo',
   'topo.toolbar': 'Marking tools',
   'topo.tools': 'Tools',
   'topo.undo': 'Undo',
