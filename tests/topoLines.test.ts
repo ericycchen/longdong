@@ -19,6 +19,15 @@ const render = (k: number, extra: object = {}) => renderToStaticMarkup(createEle
 const count = (html: string, re: RegExp) => (html.match(re) ?? []).length
 
 describe('Topo 標記的自動排版（畫面上的大小）', () => {
+  it('solo（路線卡片）：只標選到的路線的編號與說明，其他路線只畫線、變淡', () => {
+    const html = render(0.5, { highlight: 'a', solo: true })
+    expect(html).toContain('>10<')
+    expect(html).not.toContain('>11<')
+    expect(html).toContain('路線甲')
+    expect(html).not.toContain('路線乙')
+    expect(count(html, /topo-route kind-other dim/g)).toBeGreaterThan(0)
+  })
+
   it('顏色依種類：運攀藍色，其他（傳攀、上方架繩、抱石、混合）紅色', () => {
     const html = render(1)
     expect(html).toContain('topo-route kind-sport')

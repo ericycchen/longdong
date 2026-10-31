@@ -4576,6 +4576,50 @@ body:has(.sim-banner) main.map:not(.shell main.map) {
   margin: 0;
 }
 
+/* 路線卡片的 Topo：灰階、染上區域的顏色，融進卡片；只有這條路線周圍是原色（RouteReveal），其他路線淡淡的。點了開全螢幕 */
+.route-topo {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.route-topo:focus-visible {
+  outline: 2px solid var(--area-color, var(--brand));
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
+}
+
+.route-topo .topo-frame {
+  isolation: isolate;
+}
+
+.route-topo .topo-frame > img {
+  filter: grayscale(1) contrast(0.85) brightness(0.85);
+}
+
+.route-topo .topo-frame::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: var(--area-color, var(--brand));
+  mix-blend-mode: color;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+
+.route-topo .topo-frame.ready::after {
+  opacity: 0.55;
+}
+
+.route-topo .topo-frame > svg {
+  z-index: 2;
+}
+
+.route-topo .topo-route.dim {
+  opacity: 0.4;
+}
+
 /* 全螢幕：黑底，照片在舞台裡縮放與平移（src/topo/TopoFullscreen.tsx） */
 .topo-full-open {
   position: absolute;
@@ -5865,6 +5909,9 @@ dialog.topo-phone::backdrop {
   width: 100%;
   height: 100%;
   border-radius: 0;
+  /* 上下浮著按鈕佔的高度：照片的上下緣可以拖到按鈕外面（ZoomPane 讀這兩個值） */
+  scroll-padding-top: calc(12px + var(--topo-btn) + 8px + env(safe-area-inset-top));
+  scroll-padding-bottom: calc(16px + var(--topo-btn) + 8px + env(safe-area-inset-bottom));
 }
 
 .topo-phone .topo-zoom-inner {

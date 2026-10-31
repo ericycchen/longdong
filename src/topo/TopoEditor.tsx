@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useIsAdmin } from '../admin'
 import { GradePill } from '../components/GradePill'
@@ -22,7 +22,7 @@ import { HistorySection } from '../edit/HistorySection'
 import { EditKeys } from '../edit/KeyList'
 import { loadEdits, loadPhotos, useSectorTopos, useTopoState } from './store'
 import { routeLabels } from './TopoSection'
-import { px, routeInfo, TopoFrame, TopoLines } from './TopoView'
+import { px, RouteReveal, routeInfo, TopoFrame, TopoLines } from './TopoView'
 import { UploadButton } from './TopoUpload'
 import { DRAG_PX, ZoomPane, type ZoomFocus } from './ZoomPane'
 import '../edit/edit.css'
@@ -235,25 +235,6 @@ function useGrayBase() {
       return !on
     })
   return [gray, toggle] as const
-}
-
-/**
- * 灰階底上，選到的路線周圍疊回原色的照片：沿著線一條柔邊的帶子（幾層寬窄不同的半透明線疊出來，不用模糊濾鏡，縮放、拖曳時不吃效能）。
- * width：帶子最寬的寬度（照片像素）。
- */
-function RouteReveal({ photo, line, width }: { photo: TopoPhoto; line: Point[]; width: number }) {
-  const id = useId()
-  const d = smoothPath(line.map((p) => px(photo, p) as Pt))
-  return (
-    <g className="topo-reveal" aria-hidden>
-      <mask id={id} maskUnits="userSpaceOnUse" x={0} y={0} width={photo.width} height={photo.height}>
-        {[1, 0.7, 0.45].map((f) => (
-          <path key={f} d={d} fill="none" stroke="#fff" strokeOpacity={0.5} strokeWidth={width * f} strokeLinecap="round" strokeLinejoin="round" />
-        ))}
-      </mask>
-      <image href={imageUrl(photo.image)} x={0} y={0} width={photo.width} height={photo.height} mask={`url(#${id})`} />
-    </g>
-  )
 }
 
 /** 從下方滑出的面板（路線清單）：點外面關閉；也是 dialog，返回手勢、Esc 先關這個，不會關掉整個編輯器 */
@@ -680,6 +661,8 @@ function Editor({
   const aimHandlers = {
     onPointerDownCapture: (e: ReactPointerEvent<HTMLDivElement>) => {
       if (e.pointerType !== 'touch') return
+      // 拖曳點時改成捏合（縮放區接走手指），點可能收不到放開：按在點以外的地方時，上一次的拖曳一定結束了
+      if (e.isPrimary && !(e.target as Element).closest('.topo-handles, .topo-hits')) dragging.current = null
       if (e.isPrimary) fingers.current.clear()
       fingers.current.add(e.pointerId)
       aimed.current = false
@@ -725,15 +708,16 @@ function Editor({
     },
   }
 
-  // 拖曳線段的點或 bolt：按下時記一次復原點，移動時直接改草稿
+  // 拖曳線段的點或 bolt：真的移動時才記一次復原點（只按一下、點兩下按到點不多一個復原點），移動時直接改草稿
   const dragging = useRef<{ kind: 'line'; index: number; at: Point } | { kind: 'bolt'; pos: string } | null>(null)
+  const dragMoved = useRef(false)
   const startDrag = (e: ReactPointerEvent<SVGElement>, target: NonNullable<typeof dragging.current>) => {
     if (e.button !== 0) return
     e.stopPropagation()
     e.currentTarget.setPointerCapture(e.pointerId)
     dragging.current = target
+    dragMoved.current = false
     setPicked(target)
-    edit((m) => m)
     if (onClose && e.pointerType === 'touch' && e.currentTarget.ownerSVGElement) showLoupe(e, e.currentTarget.ownerSVGElement)
   }
   const onDrag = (e: ReactPointerEvent<SVGElement>) => {
@@ -742,6 +726,10 @@ function Editor({
     if (!d || !svg || !selected) return
     const p = pointAt(e, svg)
     if (loupe) showLoupe(e, svg)
+    if (!dragMoved.current) {
+      dragMoved.current = true
+      edit((m) => m)
+    }
     const { marks: all, crop: keep } = base()
     if (d.kind === 'line') {
       // 分岔出來的路線與原路線共用的點一起移動

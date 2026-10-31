@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type ReactNode, type SVGProps } from 'react'
+import { useId, useLayoutEffect, useRef, useState, type ReactNode, type SVGProps } from 'react'
 import { navigate } from '../router'
 import type { Route } from '../data/schema'
 import { centeredBox, pathLength, Placer, pointAlong, smoothPath, textWidth, wrapText, type Box, type Pt } from './annotate'
@@ -58,6 +58,25 @@ export function TopoFrame({
         {children(k)}
       </svg>
     </div>
+  )
+}
+
+/**
+ * 灰階底上，選到的路線周圍疊回原色的照片：沿著線一條柔邊的帶子（幾層寬窄不同的半透明線疊出來，不用模糊濾鏡，縮放、拖曳時不吃效能）。
+ * width：帶子最寬的寬度（照片像素）。
+ */
+export function RouteReveal({ photo, line, width }: { photo: TopoPhoto; line: Point[]; width: number }) {
+  const id = useId()
+  const d = smoothPath(line.map((p) => px(photo, p) as Pt))
+  return (
+    <g className="topo-reveal" aria-hidden>
+      <mask id={id} maskUnits="userSpaceOnUse" x={0} y={0} width={photo.width} height={photo.height}>
+        {[1, 0.7, 0.45].map((f) => (
+          <path key={f} d={d} fill="none" stroke="#fff" strokeOpacity={0.5} strokeWidth={width * f} strokeLinecap="round" strokeLinejoin="round" />
+        ))}
+      </mask>
+      <image href={imageUrl(photo.image)} x={0} y={0} width={photo.width} height={photo.height} mask={`url(#${id})`} />
+    </g>
   )
 }
 
@@ -127,6 +146,7 @@ interface Plan {
  * highlight 的路線用亮色、其他變淡；bolts 決定畫哪些路線的 bolt 與 anchor（預設只畫 highlight 的）；
  * 有 link 時點線段換到那條路線。兩條路線共用的線段只畫一次。
  * editing（編輯時）：線畫細一點、不顯示難度名稱等說明；牌子避開 highlight 路線的點（點上有把手），放不下就不顯示。
+ * solo（路線卡片）：只標 highlight 的編號與說明，其他路線只畫線。
  */
 export function TopoLines({
   photo,
@@ -140,6 +160,7 @@ export function TopoLines({
   onPick,
   crop,
   editing,
+  solo,
 }: {
   photo: TopoPhoto
   marks: Marks
@@ -155,6 +176,7 @@ export function TopoLines({
   onPick?: (id: string) => void
   crop?: Crop
   editing?: boolean
+  solo?: boolean
 }) {
   const c = crop ?? FULL_CROP
   const u = uiScale()
@@ -203,7 +225,7 @@ export function TopoLines({
   // 2. 路線編號牌
   for (const id of priority) {
     const text = labels.get(id)
-    if (!text) continue
+    if (!text || (solo && id !== highlight)) continue
     const line = lineOf(id)
     const w = (textWidth(text, PILL_FONT) + 14) * k
     const h = PILL_H * k

@@ -707,8 +707,9 @@ try {
   check('手機：平移之後很晚才來的 click 不會多出一個點', (await phoneHandles().count()) === 2, `${await phoneHandles().count()} 個點`)
   const paneBox = await shownPhoto(phone.page)
   const emptySpot = { x: paneBox.x + paneBox.width * 0.6, y: paneBox.y + paneBox.height * 0.4 }
+  // 兩下隔開一點（不是點兩下）
   await phone.page.touchscreen.tap(emptySpot.x, emptySpot.y)
-  await phone.page.waitForTimeout(300)
+  await phone.page.waitForTimeout(500)
   await phone.page.touchscreen.tap(emptySpot.x, emptySpot.y)
   await phone.page.waitForTimeout(300)
   check('手機：平移之後，下一次真的點一下照樣加一個點', (await phoneHandles().count()) === 3, `${await phoneHandles().count()} 個點`)
@@ -729,6 +730,47 @@ try {
   await phone.page.waitForTimeout(500)
   check('手機：點兩下回到原尺寸，畫線中也不會多出點；沒有倍率、縮放按鈕', zoomedBefore > 100 && (await zoomText()) === '100%' && (await phoneHandles().count()) === 3 && !(await phone.page.locator('.topo-phone .topo-zoom-controls').isVisible()), `${zoomedBefore}% → ${await zoomText()}，${await phoneHandles().count()} 個點`)
   await phone.page.screenshot({ path: process.env.PHONE_SHOT ?? 'dist-e2e/phone.png' })
+  // 照片的下緣可以往上拖到下面工具的上面（最下面也能編輯），不會拖過頭
+  // 先放大到照片比畫面高
+  const pz = await phoneFrame()
+  const pzm = { x: pz.x + pz.width / 2, y: Math.min(pz.y + pz.height / 2, 400) }
+  await touch('touchStart', [{ x: pzm.x, y: pzm.y - 20, id: 1 }, { x: pzm.x, y: pzm.y + 20, id: 2 }])
+  for (let step = 1; step <= 8; step++) await touch('touchMove', [{ x: pzm.x, y: pzm.y - 20 - 25 * step, id: 1 }, { x: pzm.x, y: pzm.y + 20 + 25 * step, id: 2 }])
+  await touch('touchEnd', [])
+  await phone.page.waitForTimeout(300)
+  // 從離線上的點最遠的地方開始拖（不會拖到點）
+  const handlesNow = await phoneHandles().evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }))
+  const up = [60, 195, 330]
+    .flatMap((x) => [560, 640, 700].map((y) => ({ x, y })))
+    .map((c) => ({ c, d: Math.min(Infinity, ...handlesNow.map((h) => Math.hypot(h.x - c.x, h.y - c.y))) }))
+    .sort((a, b) => b.d - a.d)[0].c
+  await touch('touchStart', [{ ...up, id: 1 }])
+  for (let step = 1; step <= 12; step++) await touch('touchMove', [{ x: up.x, y: up.y - 50 * step, id: 1 }])
+  await touch('touchEnd', [])
+  await phone.page.waitForTimeout(300)
+  const photoBottom = (await phoneFrame()).y + (await phoneFrame()).height
+  const toolsTop = (await phone.page.locator('.topo-modes').boundingBox())!.y
+  check('手機：照片的下緣可以往上拖到下面工具的上面，不會拖過頭；不多出點', photoBottom <= toolsTop && photoBottom > toolsTop - 30 && (await phoneHandles().count()) === 3, `照片下緣 ${Math.round(photoBottom)}，工具上緣 ${Math.round(toolsTop)}，${await phoneHandles().count()} 個點`)
+  // 一根手指按在點上、接著第二根手指捏合：放開後點一下照片照樣加點（拖曳點的狀態不會卡住）
+  // 畫面中間看得到的點（上下浮著的按鈕之外）
+  const visiblePoints = await phoneHandles().evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }))
+  const onPoint = visiblePoints.find((p) => p.y > 120 && p.y < 680 && p.x > 20 && p.x < 300) ?? visiblePoints[0]
+  await touch('touchStart', [{ ...onPoint, id: 1 }])
+  await touch('touchStart', [{ ...onPoint, id: 1 }, { x: onPoint.x + 60, y: onPoint.y + 60, id: 2 }])
+  for (let step = 1; step <= 4; step++) await touch('touchMove', [{ ...onPoint, id: 1 }, { x: onPoint.x + 60 + 10 * step, y: onPoint.y + 60 + 10 * step, id: 2 }])
+  await touch('touchEnd', [])
+  await phone.page.waitForTimeout(500)
+  const handlesAfter = await phoneHandles().evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }))
+  const free = [60, 195, 330]
+    .flatMap((x) => [200, 400, 600].map((y) => ({ x, y })))
+    .map((c) => ({ c, d: Math.min(Infinity, ...handlesAfter.map((h) => Math.hypot(h.x - c.x, h.y - c.y))) }))
+    .sort((a, b) => b.d - a.d)[0].c
+  const countBefore = await phoneHandles().count()
+  await phone.page.touchscreen.tap(free.x, free.y)
+  await phone.page.waitForTimeout(400)
+  check('手機：從點上開始捏合之後，點一下照片照樣加一個點', (await phoneHandles().count()) === countBefore + 1, `${countBefore} → ${await phoneHandles().count()} 個點`)
+  await phone.page.locator('.topo-float').getByRole('button', { name: '復原' }).click()
+  await phone.page.waitForTimeout(200)
   // 再按一次「畫線」結束畫線：回到選路線，點照片不再加點
   check('手機：畫線時「畫線」亮著', (await phone.page.locator('.topo-modes button[aria-pressed="true"]').textContent()) === '畫線')
   await phone.page.locator('.topo-modes button[aria-pressed="true"]').click()
@@ -749,11 +791,15 @@ try {
   const chipCount = await chips.count()
   // 點在離線上的點最遠的地方（不會按到點）
   const handleAt = await phoneHandles().evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }))
-  const boltSpot = [0.15, 0.5, 0.85]
-    .flatMap((fx) => [0.2, 0.5, 0.8].map((fy) => ({ x: pf.x + pf.width * fx, y: pf.y + pf.height * fy })))
+  const spots = [0.15, 0.5, 0.85].flatMap((fx) => [0.2, 0.5, 0.8].map((fy) => ({ x: pf.x + pf.width * fx, y: pf.y + pf.height * fy })))
+  // 浮著的按鈕下面不算（點不到照片）
+  const onPhoto = (await phone.page.evaluate((cs) => cs.map((c) => !!document.elementFromPoint(c.x, c.y)?.closest('.topo-frame')), spots)) as boolean[]
+  const boltSpot = spots
+    .filter((_, i) => onPhoto[i])
     .map((c) => ({ c, d: Math.min(Infinity, ...handleAt.map((h) => Math.hypot(h.x - c.x, h.y - c.y))) }))
     .sort((a, b) => b.d - a.d)[0].c
   await phone.page.touchscreen.tap(boltSpot.x, boltSpot.y)
+  await phone.page.waitForTimeout(300)
   check('手機：Bolt 一排位置浮在照片上，點照片放下第一顆（和線的點分開）', chipCount > 0 && (await phone.page.locator('.topo-handles rect.bolt').count()) === 1 && (await phoneHandles().count()) === 3, `${chipCount} 個位置，${await phone.page.locator('.topo-handles rect.bolt').count()} 顆 bolt，${await phoneHandles().count()} 個點`)
   await phone.page.locator('.topo-modes button[aria-pressed="true"]').click()
   check('手機：再按一次 Bolt 結束放 bolt', (await phone.page.locator('.topo-modes button[aria-pressed="true"]').count()) === 0 && (await phone.page.locator('.topo-float-chips').count()) === 0)
@@ -931,6 +977,32 @@ try {
   check('手機路線頁：長按 Topo 在這一頁打開 Topo 編輯器（不換頁），選好這條路線', vp.url() === routeUrl && (await vp.locator('.topo-phone-title b').textContent()) === topoRoutes[0].number, vp.url())
   await vp.locator('.topo-phone-close').click()
   check('手機路線頁：關閉 Topo 編輯器回到路線卡片', (await vp.locator('dialog.topo-phone').count()) === 0 && vp.url() === routeUrl)
+  // 路線卡片的 Topo：這條路線是唯一的主角——沒有按鈕、只標這條的編號、照片灰階（這條周圍原色）、放大到這條路線；點了開全螢幕
+  const card = vp.locator('.route-m figure.route-topo').first()
+  const cardState = await card.evaluate((f) => {
+    const img = f.querySelector<HTMLImageElement>('.topo-frame > img')!
+    return {
+      buttons: f.querySelectorAll('button').length,
+      badges: [...f.querySelectorAll('.topo-badge text')].map((t) => t.textContent),
+      gray: getComputedStyle(img).filter.includes('grayscale'),
+      tint: getComputedStyle(f.querySelector('.topo-frame')!, '::after').mixBlendMode,
+      reveal: f.querySelectorAll('.topo-reveal').length,
+      zoomed: parseFloat(img.style.width) > 100,
+      dim: f.querySelectorAll('.topo-route.dim').length,
+    }
+  })
+  check(
+    '手機路線卡片：Topo 上沒有按鈕，只標這條路線的編號',
+    cardState.buttons === 0 && cardState.badges.join(',') === topoRoutes[0].number,
+    JSON.stringify(cardState),
+  )
+  check('手機路線卡片：照片灰階並染上區域的顏色，這條路線周圍是原色，放大到這條路線', cardState.gray && cardState.tint === 'color' && cardState.reveal === 1 && cardState.zoomed, JSON.stringify(cardState))
+  await card.click()
+  await vp.waitForSelector('dialog.topo-full[open]', { timeout: 5000 })
+  check('手機路線卡片：點 Topo 開全螢幕，選好這條路線', (await vp.locator('dialog.topo-full[open] .topo-route.on').count()) > 0 && vp.url() === routeUrl, vp.url())
+  await vp.keyboard.press('Escape')
+  await vp.waitForSelector('dialog.topo-full', { state: 'detached', timeout: 5000 }).catch(() => {})
+  check('手機路線卡片：關閉全螢幕回到路線卡片', (await vp.locator('dialog.topo-full[open]').count()) === 0 && vp.url() === routeUrl, vp.url())
   await vp.locator('.route-m .page-tools .tool-button[aria-haspopup="menu"]').click()
   await vp.getByRole('menuitem', { name: '編輯：Topo' }).click()
   await vp.waitForSelector('dialog.topo-phone[open] .topo-phone-title', { timeout: 10000 })

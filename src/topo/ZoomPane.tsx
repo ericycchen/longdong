@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useLang } from '../i18n'
-import { clampView, fitSize, IDENTITY, MAX_SCALE, moveView, type Pt, type Size, type View } from './viewport'
+import { clampView, fitSize, IDENTITY, MAX_SCALE, moveView, type Inset, type Pt, type Size, type View } from './viewport'
 
 /** 要縮放到的一塊（照片上的比例 0–1）；seq 不同才算新的一次 */
 export interface ZoomFocus {
@@ -22,6 +22,8 @@ const LONG_PRESS_MS = 350
 /** 手指點兩下：兩次放開相隔不超過這個時間（毫秒）、距離不超過 DOUBLE_TAP_PX，回到原尺寸 */
 const DOUBLE_TAP_MS = 350
 const DOUBLE_TAP_PX = 30
+/** 點兩下之後這段時間（毫秒）的點擊都擋掉：瀏覽器可能在點兩下之後才送出兩下的 click */
+const DOUBLE_TAP_QUIET_MS = 400
 
 /**
  * 編輯用的縮放區（電腦版）：滾輪或 +／- 縮放（以游標位置為中心）、0 回到整張；
@@ -35,6 +37,7 @@ const DOUBLE_TAP_PX = 30
  * holding：回傳 true 時手指按住的拖曳留給外面（手機版編輯按住瞄準加點），不平移。
  * focus：換一個值（seq）就平滑地縮放到那一塊（照片上的比例 0–1）；那一塊已經整個看得到、放得夠大時不動。
  * aspect（手機版編輯）：縮放區撐滿外面的空間，照片（這個寬高比）置中縮到放得下；放大後照片可以佔滿整個縮放區。
+ * 上下浮著按鈕時，縮放區的 CSS scroll-padding-top／bottom 設成按鈕佔的高度：照片的上下緣可以拖到按鈕外面（沒放大也可以）。
  * 編輯時手指點兩下回到原尺寸，接著呼叫 onDoubleTap（第一下若加了點，由外面收回）；第二下不當作點了一下。
  */
 export function ZoomPane({
@@ -55,6 +58,7 @@ export function ZoomPane({
   const { t } = useLang()
   const box = useRef<HTMLDivElement>(null)
   const [stage, setStage] = useState<Size>({ w: 0, h: 0 })
+  const [inset, setInset] = useState<Inset>({ top: 0, bottom: 0 })
   const [view, setView] = useState<View>(IDENTITY)
   const [space, setSpace] = useState(false)
   const [hand, setHand] = useState(false)
@@ -74,10 +78,18 @@ export function ZoomPane({
   const touches = useRef(new Map<number, Pt>())
   /** 上一次手指點一下（放開的時間、位置）：再點一下就是點兩下 */
   const lastTap = useRef<{ at: number; p: Pt } | null>(null)
+  /** 上一次點兩下的時間 */
+  const doubleAt = useRef(-Infinity)
 
   useLayoutEffect(() => {
     const el = box.current!
-    const measure = () => setStage({ w: el.clientWidth, h: el.clientHeight })
+    const measure = () => {
+      setStage({ w: el.clientWidth, h: el.clientHeight })
+      const css = getComputedStyle(el)
+      const top = parseFloat(css.scrollPaddingTop) || 0
+      const bottom = parseFloat(css.scrollPaddingBottom) || 0
+      setInset((v) => (v.top === top && v.bottom === bottom ? v : { top, bottom }))
+    }
     measure()
     const ro = new ResizeObserver(measure)
     ro.observe(el)
@@ -86,7 +98,7 @@ export function ZoomPane({
   /** 照片在縮放區裡（沒放大時）的大小 */
   const content = aspect ? fitSize(stage, aspect) : stage
   // 照片的寬高比變了（裁切、視窗大小）：放大後的位置重新限制在照片範圍內
-  useEffect(() => setView((v) => clampView(v, stage, content)), [stage, content.w, content.h])
+  useEffect(() => setView((v) => clampView(v, stage, content, inset)), [stage, content.w, content.h, inset])
 
   useEffect(() => () => clearTimeout(longTimer.current), [])
 
@@ -103,7 +115,7 @@ export function ZoomPane({
       if (v.scale >= scale && seen(box.x + box.w / 2, box.w, stage.w, v.x) && seen(box.y + box.h / 2, box.h, stage.h, v.y)) return v
       const cx = box.x + box.w / 2
       const cy = box.y + box.h / 2
-      return clampView({ scale, x: -cx * scale, y: -cy * scale }, stage, content)
+      return clampView({ scale, x: -cx * scale, y: -cy * scale }, stage, content, inset)
     })
     setGliding(true)
     const timer = setTimeout(() => setGliding(false), 350)
@@ -116,7 +128,9 @@ export function ZoomPane({
     const r = box.current!.getBoundingClientRect()
     return { x: e.clientX - r.left - r.width / 2, y: e.clientY - r.top - r.height / 2 }
   }
-  const zoomBy = (ratio: number, at: Pt = { x: 0, y: 0 }) => setView((v) => moveView(v, at, at, ratio, stage, content))
+  const zoomBy = (ratio: number, at: Pt = { x: 0, y: 0 }) => setView((v) => moveView(v, at, at, ratio, stage, content, inset))
+  /** 可以平移：放大了，或照片的上下緣能拖到按鈕外面 */
+  const movable = view.scale > 1 || inset.top > 0 || inset.bottom > 0
 
   useEffect(() => {
     const el = box.current!
@@ -211,7 +225,7 @@ export function ZoomPane({
       const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y)
       const mid = (a: Pt, b: Pt): Pt => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 })
       const ratio = dist(now, other) / (dist(finger, other) || 1)
-      setView((v) => moveView(v, mid(finger, other), mid(now, other), ratio, stage, content))
+      setView((v) => moveView(v, mid(finger, other), mid(now, other), ratio, stage, content, inset))
       return
     }
     if (finger) touches.current.set(e.pointerId, rel(e))
@@ -222,14 +236,14 @@ export function ZoomPane({
         clearTimeout(longTimer.current)
         dragged.current = true
       }
-      const fingerPan = e.pointerType === 'touch' && far && view.scale > 1 && !onHandle.current && !holding?.()
+      const fingerPan = e.pointerType === 'touch' && far && movable && !onHandle.current && !holding?.()
       if (viewing ? far && view.scale > 1 : armed.current || fingerPan) startPanAt(e)
     }
     const from = pan.current
     if (!from) return
     const to = rel(e)
     pan.current = to
-    setView((v) => moveView(v, from, to, 1, stage, content))
+    setView((v) => moveView(v, from, to, 1, stage, content, inset))
   }
   const endPan = (e: ReactPointerEvent) => {
     touches.current.delete(e.pointerId)
@@ -239,6 +253,7 @@ export function ZoomPane({
       if (prev && e.timeStamp - prev.at < DOUBLE_TAP_MS && Math.hypot(p.x - prev.p.x, p.y - prev.p.y) < DOUBLE_TAP_PX) {
         lastTap.current = null
         dragged.current = true
+        doubleAt.current = performance.now()
         setGliding(true)
         setTimeout(() => setGliding(false), 350)
         setView(IDENTITY)
@@ -255,6 +270,11 @@ export function ZoomPane({
   // 平移、拖曳之後放開，不要當作點了一下（多出一個點、選到路線）
   // 不靠計時：旗標留到下一次按下才清，click 多晚到都擋得住；沒有 click 也不會擋到之後的（鍵盤觸發的 click 不擋）
   const stopClick = (e: ReactMouseEvent) => {
+    if (e.detail !== 0 && performance.now() - doubleAt.current < DOUBLE_TAP_QUIET_MS) {
+      e.stopPropagation()
+      e.preventDefault()
+      return
+    }
     if (!dragged.current || e.detail === 0) return
     dragged.current = false
     e.stopPropagation()
