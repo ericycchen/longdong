@@ -124,7 +124,7 @@ const uiScale = () => (typeof window !== 'undefined' && window.matchMedia?.('(mi
 /** solo 時其他路線的編號牌縮成這個比例，放在線的下段（靠近起點；畫面中間留給主角） */
 const SMALL_PILL = 0.8
 const SMALL_SPOTS = [0.14, 0.22, 0.08, 0.3]
-/** 線在畫面上至少這麼長（螢幕像素）才標編號；選到的路線不受限 */
+/** 線在畫面上比這個短（螢幕像素）的路線，編號最後才放；選到的路線不受限 */
 const MIN_LABEL_LINE_PX = 40
 /** 線在畫面上這麼長才多顯示難度、再長才多顯示名稱；選到的路線一律顯示 */
 const GRADE_LINE_PX = 110
@@ -229,6 +229,8 @@ export function TopoLines({
     }
   }
   // 2. 路線編號牌（solo 時其他路線的編號在說明之後才放，見 4.）
+  /** 線在畫面上很短（只畫了一小段、縮得很小）的路線：其他編號都放好之後才放，放得下才標 */
+  const short = (id: string) => id !== highlight && !!lineOf(id) && lineOf(id)!.length >= 2 && length.get(id)! < MIN_LABEL_LINE_PX
   const placePill = (id: string, small: boolean) => {
     const text = labels.get(id)
     if (!text) return
@@ -238,10 +240,14 @@ export function TopoLines({
     const h = PILL_H * f * k
     let spots: Box[]
     if (line && line.length >= 2) {
-      if (id !== highlight && length.get(id)! < MIN_LABEL_LINE_PX) return
       const on = labelLine(id, line)
       const along = (small ? SMALL_SPOTS : LABEL_SPOTS).map((f) => pointAlong(on, f))
       spots = along.map((p) => centeredBox(p, w, h))
+      // 很短的線（常常是從照片邊緣出去的示意線）：線上放不下時，放在線的終點上面或旁邊
+      if (short(id)) {
+        const [ex, ey] = line[line.length - 1]
+        spots.push(centeredBox([ex, ey - h * 0.9], w, h), centeredBox([ex + w / 2 + h / 3, ey], w, h), centeredBox([ex - w / 2 - h / 3, ey], w, h))
+      }
       // 選到的路線一定要標：線上都沒空位時放在線的旁邊
       if (id === highlight) spots.push(...along.flatMap(([x, y]) => [centeredBox([x + w / 2 + h / 2, y], w, h), centeredBox([x - w / 2 - h / 2, y], w, h)]))
     } else {
@@ -254,7 +260,9 @@ export function TopoLines({
     entry.pill = placer.place(spots, id === highlight && !editing)
     entry.small = small
   }
-  for (const id of priority) if (!solo || id === highlight) placePill(id, false)
+  const mains = priority.filter((id) => !solo || id === highlight)
+  for (const id of mains) if (!short(id)) placePill(id, false)
+  for (const id of mains) if (short(id)) placePill(id, false)
   // 3. 多的說明：編號牌下面的難度與名稱、bolt 旁邊的材質與年份（空間夠才顯示）
   for (const id of editing ? [] : priority) {
     const entry = plan.get(id)!
@@ -327,7 +335,11 @@ export function TopoLines({
   }
 
   // 4. solo：其他路線的編號（小、淡），放得下才標，不帶說明
-  if (solo && !editing) for (const id of priority) if (id !== highlight) placePill(id, true)
+  if (solo && !editing) {
+    const others = priority.filter((id) => id !== highlight)
+    for (const id of others) if (!short(id)) placePill(id, true)
+    for (const id of others) if (short(id)) placePill(id, true)
+  }
 
   // SVG 的 <a> 的 href 不是字串，站內換頁攔不到（router.ts），改用點擊與 Enter 換頁
   const pick = onPick ?? (link && ((id: string) => navigate(link(id))))

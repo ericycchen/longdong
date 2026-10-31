@@ -117,9 +117,18 @@ describe('Topo 標記的自動排版（畫面上的大小）', () => {
     expect(html.lastIndexOf('class="topo-line"')).toBeLessThan(html.indexOf('class="topo-bolt'))
   })
 
-  it('縮得很小，太短的路線不標編號；選到的路線仍然標', () => {
+  it('縮得很小，放不下的編號不標；選到的路線仍然標', () => {
     expect(count(render(60), /class="topo-badge"/g)).toBe(0)
     expect(count(render(60, { highlight: 'a' }), /class="topo-badge"/g)).toBe(1)
+  })
+
+  it('很短的線（從照片下緣出去的示意線，例如 565）：其他編號放好之後，有空位照樣標', () => {
+    const withSketch: Marks = { ...marks, c: { line: [[1000, 9990], [1030, 9900], [1050, 9800]] } }
+    const sketchLabels = new Map([...labels, ['c', '9']])
+    const html = renderToStaticMarkup(createElement('svg', null, createElement(TopoLines, { photo, marks: withSketch, labels: sketchLabels, k: 1, info })))
+    expect(html).toContain('>9<')
+    expect(html).toContain('>10<')
+    expect(html).toContain('>11<')
   })
 
   it('同一張 Topo 的編號、bolt、難度名稱、bolt 材質一起排：不論縮放，彼此都不重疊；名稱太長時換行', () => {
