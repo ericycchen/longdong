@@ -4588,35 +4588,41 @@ body:has(.sim-banner) main.map:not(.shell main.map) {
   border-radius: var(--radius-sm);
 }
 
-/* 路線卡片的 Topo：灰階、染上區域的顏色，融進卡片；只有這條路線周圍是原色（RouteReveal），其他路線淡淡的 */
-.route-topo:focus-visible {
-  outline: 2px solid var(--area-color, var(--brand));
-  outline-offset: 3px;
-  border-radius: var(--radius-sm);
+/*
+ * 路線卡片的 Topo：和上面標題卡的地圖連成一整塊——照片撐滿卡片的寬度、上緣淡入卡片的漸層、左右下緣淡出，
+ * 邊緣帶一點區域色；照片灰階（同編輯器），只有這條路線周圍是原色（RouteReveal），其他路線淡淡的
+ */
+[data-layout] .route-m .route-topo {
+  margin: -6px -16px 0 -14px;
 }
 
 .route-topo .topo-frame {
-  isolation: isolate;
+  border-radius: 0;
+  background: transparent;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 22%, #000 94%, transparent), linear-gradient(to right, transparent, #000 5%, #000 95%, transparent);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to bottom, transparent, #000 22%, #000 94%, transparent), linear-gradient(to right, transparent, #000 5%, #000 95%, transparent);
+  mask-composite: intersect;
 }
 
 .route-topo .topo-frame > img {
-  filter: grayscale(1) contrast(0.85) brightness(0.85);
+  filter: grayscale(1) contrast(0.8);
 }
 
+/* 邊緣一圈淡淡的區域色 */
 .route-topo .topo-frame::after {
   content: '';
   position: absolute;
   inset: 0;
   z-index: 1;
-  background: var(--area-color, var(--brand));
-  mix-blend-mode: color;
+  box-shadow: inset 0 0 36px 6px color-mix(in srgb, var(--area-color, var(--brand)) 45%, transparent);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.4s ease;
 }
 
 .route-topo .topo-frame.ready::after {
-  opacity: 0.55;
+  opacity: 1;
 }
 
 .route-topo .topo-frame > svg {
