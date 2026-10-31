@@ -45,12 +45,17 @@ export function siteUrl(path: string): string {
 
 export type ShareTarget = 'line' | 'facebook' | 'messenger'
 
+/** LINE 裡點連結時用手機的瀏覽器打開（LINE 內建的瀏覽器不能安裝 App、離線快取也不在那裡） */
+export function lineExternal(url: string): string {
+  return `${url}${url.includes('?') ? '&' : '?'}openExternalBrowser=1`
+}
+
 /** 各 App 的分享網址；Messenger 只有手機 App 的網址（fb-messenger://），電腦上不提供 */
 export function targetUrl(target: ShareTarget, url: string, text: string): string {
   const u = encodeURIComponent(url)
   switch (target) {
     case 'line':
-      return `https://line.me/R/share?text=${encodeURIComponent(`${text}\n${url}`)}`
+      return `https://line.me/R/share?text=${encodeURIComponent(`${text}\n${lineExternal(url)}`)}`
     case 'facebook':
       return `https://www.facebook.com/sharer/sharer.php?u=${u}`
     case 'messenger':

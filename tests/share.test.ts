@@ -3,7 +3,7 @@ import type { RouteRef } from '../src/data/dataset'
 import { translate } from '../src/i18n'
 import { en } from '../src/i18n/en'
 import { zh } from '../src/i18n/zh'
-import { placeShareText, routeUrl, shareText, targetUrl } from '../src/share'
+import { lineExternal, placeShareText, routeUrl, shareText, targetUrl } from '../src/share'
 
 const ref = (sectors: number, number?: string, grade?: string) => {
   const sector = { id: 'longdong/golden-valley-s1', name: { zh: '貓屋', en: 'The Cathouse' }, routes: [] }
@@ -23,8 +23,10 @@ describe('分享路線', () => {
     const url = 'https://longdong.web.app/route/longdong/jar2yu'
     const line = new URL(targetUrl('line', url, '#102 拉斯塔法里海鳥'))
     expect(line.origin + line.pathname).toBe('https://line.me/R/share')
+    // LINE 裡點連結用手機的瀏覽器打開
     expect(line.searchParams.get('text')).toBe(`#102 拉斯塔法里海鳥
-${url}`)
+${url}?openExternalBrowser=1`)
+    expect(lineExternal('https://longdong.web.app/?r=a')).toBe('https://longdong.web.app/?r=a&openExternalBrowser=1')
     expect(new URL(targetUrl('facebook', url, 'x')).searchParams.get('u')).toBe(url)
     expect(targetUrl('messenger', url, 'x')).toBe(`fb-messenger://share/?link=${encodeURIComponent(url)}`)
   })
