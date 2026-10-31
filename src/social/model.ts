@@ -7,8 +7,8 @@
  *   /v2/reports/<id>                 { path, uid, reason?, createdAt }   檢舉，只有管理員看得到
  */
 
-/** 端對端測試（vite build --mode e2e）讀寫 Firebase 模擬器，不碰正式資料 */
-export const E2E = import.meta.env.MODE === 'e2e'
+/** 端對端測試（vite build --mode e2e）讀寫 Firebase 模擬器，不碰正式資料；建置腳本（Node，沒有 import.meta.env）讀正式資料 */
+export const E2E = import.meta.env?.MODE === 'e2e'
 
 export const DB_URL = E2E ? 'http://127.0.0.1:9000' : 'https://longdong.firebaseio.com'
 
