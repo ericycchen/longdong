@@ -118,6 +118,15 @@ async function clickCanvas(page: Page, points: [number, number][]) {
   const box = (await page.locator('.edit-canvas svg[role=img]').boundingBox())!
   for (const [fx, fy] of points) await page.mouse.click(box.x + box.width * fx, box.y + box.height * fy)
 }
+/** 手機 Topo 編輯：畫面上看得到的那一塊照片（縮放區和照片重疊的範圍；縮放區比照片大，旁邊是黑邊） */
+async function shownPhoto(page: Page) {
+  const pane = (await page.locator('dialog.topo-phone .topo-zoom').boundingBox())!
+  const svg = (await page.locator('dialog.topo-phone .topo-frame svg').boundingBox())!
+  const x = Math.max(pane.x, svg.x)
+  const y = Math.max(pane.y, svg.y)
+  return { x, y, width: Math.min(pane.x + pane.width, svg.x + svg.width) - x, height: Math.min(pane.y + pane.height, svg.y + svg.height) - y }
+}
+
 const rings = (page: Page) => page.locator('.sm-edit-ring').count()
 /** 提交並等畫面說完成（「已儲存」提示）：資料庫收到了、畫面也更新完才繼續，不然接著畫的會被儲存完成時的更新蓋掉 */
 async function submitMap(page: Page) {
@@ -535,6 +544,20 @@ try {
   const fullPhoto = (await phone.page.locator('.topo-phone-photo').boundingBox())!
   const viewH = phone.page.viewportSize()!.height
   check('手機：照片可以全畫面（路線清單收起來）', !(await phone.page.locator('.topo-phone-list').isVisible()) && fullPhoto.height >= viewH - 2 && (await fullBtn.getAttribute('aria-pressed')) === 'true', `${fullPhoto.height}/${viewH}`)
+  // 工作區是整個畫面：縮放區撐滿，放大後照片蓋滿整個畫面（不是只有照片比例的一條）
+  const fullPane = (await phone.page.locator('.topo-zoom').boundingBox())!
+  await phone.page.locator('.topo-zoom-fit').click()
+  await phone.page.waitForTimeout(400)
+  const fitFrame = (await phone.page.locator('.topo-frame svg').boundingBox())!
+  const fullCdp = await phone.ctx.newCDPSession(phone.page)
+  const fc = { x: fullPane.x + fullPane.width / 2, y: fullPane.y + fullPane.height / 2 }
+  await fullCdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: fc.x - 10, y: fc.y, id: 1 }, { x: fc.x + 10, y: fc.y, id: 2 }] })
+  for (let step = 1; step <= 10; step++) await fullCdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: fc.x - 10 - 12 * step, y: fc.y, id: 1 }, { x: fc.x + 10 + 12 * step, y: fc.y, id: 2 }] })
+  await fullCdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  await phone.page.waitForTimeout(200)
+  const covered4 = await shownPhoto(phone.page)
+  check('手機全畫面：工作區（縮放區）佔滿整個畫面，放大後照片蓋滿整個畫面', fullPane.height >= viewH - 2 && fitFrame.height < fullPane.height - 100 && covered4.height >= fullPane.height - 2 && covered4.width >= fullPane.width - 2, `縮放區 ${fullPane.height}，照片 ${fitFrame.height} → 看得到 ${covered4.width}×${covered4.height}`)
+  await phone.page.locator('.topo-zoom-fit').click()
   await fullBtn.click()
   check('手機：再按一次全畫面，路線清單回來', (await phone.page.locator('.topo-phone-list').isVisible()) && (await phone.page.locator('.topo-phone-photo').boundingBox())!.height < viewH - 60)
   // 點清單選路線
@@ -643,7 +666,7 @@ try {
     document.querySelector('.topo-frame svg').dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1, clientX: r.left + r.width * 0.7, clientY: r.top + r.height * 0.3 }))
   })()`)
   check('手機：平移之後很晚才來的 click 不會多出一個點', (await phoneHandles().count()) === 2, `${await phoneHandles().count()} 個點`)
-  const paneBox = (await phone.page.locator('.topo-zoom').boundingBox())!
+  const paneBox = await shownPhoto(phone.page)
   const emptySpot = { x: paneBox.x + paneBox.width * 0.6, y: paneBox.y + paneBox.height * 0.4 }
   await phone.page.touchscreen.tap(emptySpot.x, emptySpot.y)
   await phone.page.waitForTimeout(300)
@@ -664,12 +687,18 @@ try {
   // Bolt 和線分開：按 Bolt，選位置（照片上浮著一排），點照片放下
   await phone.page.getByRole('button', { name: 'Bolt' }).click()
   await phone.page.waitForTimeout(500)
-  // 放大後照片比畫面大：位置以看得到的照片範圍（.topo-zoom）為準
-  pf = (await phone.page.locator('.topo-zoom').boundingBox())!
+  // 放大後照片比畫面大：位置以看得到的那一塊照片為準
+  pf = await shownPhoto(phone.page)
   const chips = phone.page.locator('.topo-float-chips .chip')
   const chipCount = await chips.count()
-  await phone.page.touchscreen.tap(pf.x + pf.width * 0.8, pf.y + pf.height * 0.4)
-  check('手機：Bolt 一排位置浮在照片上，點照片放下第一顆（和線的點分開）', chipCount > 0 && (await phone.page.locator('.topo-handles rect.bolt').count()) === 1 && (await phoneHandles().count()) === 3, `${chipCount} 個位置`)
+  // 點在離線上的點最遠的地方（不會按到點）
+  const handleAt = await phoneHandles().evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }))
+  const boltSpot = [0.15, 0.5, 0.85]
+    .flatMap((fx) => [0.2, 0.5, 0.8].map((fy) => ({ x: pf.x + pf.width * fx, y: pf.y + pf.height * fy })))
+    .map((c) => ({ c, d: Math.min(Infinity, ...handleAt.map((h) => Math.hypot(h.x - c.x, h.y - c.y))) }))
+    .sort((a, b) => b.d - a.d)[0].c
+  await phone.page.touchscreen.tap(boltSpot.x, boltSpot.y)
+  check('手機：Bolt 一排位置浮在照片上，點照片放下第一顆（和線的點分開）', chipCount > 0 && (await phone.page.locator('.topo-handles rect.bolt').count()) === 1 && (await phoneHandles().count()) === 3, `${chipCount} 個位置，${await phone.page.locator('.topo-handles rect.bolt').count()} 顆 bolt，${await phoneHandles().count()} 個點`)
   await phone.page.getByRole('button', { name: '完成', exact: true }).click()
   // 不常用的收在「更多」：復原、重做、分岔、裁切、清除這條路線、捨棄、修改記錄
   await phone.page.getByRole('button', { name: '更多' }).click()
@@ -847,7 +876,7 @@ try {
   await vp.getByRole('button', { name: /^(畫線|繼續畫)$/ }).click()
   await vp.waitForTimeout(400)
   const pointsBefore = await vp.locator('.topo-handles circle').count()
-  const vpPane = (await vp.locator('.topo-zoom').boundingBox())!
+  const vpPane = await shownPhoto(vp)
   await vp.touchscreen.tap(vpPane.x + vpPane.width * 0.85, vpPane.y + vpPane.height * 0.15)
   await vp.waitForTimeout(300)
   check('手機 Topo：畫線加了一個點', (await vp.locator('.topo-handles circle').count()) === pointsBefore + 1)

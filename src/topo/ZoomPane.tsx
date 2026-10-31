@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useLang } from '../i18n'
-import { clampView, IDENTITY, MAX_SCALE, moveView, type Pt, type Size, type View } from './viewport'
+import { clampView, fitSize, IDENTITY, MAX_SCALE, moveView, type Pt, type Size, type View } from './viewport'
 
 /** 要縮放到的一塊（照片上的比例 0–1）；seq 不同才算新的一次 */
 export interface ZoomFocus {
@@ -31,17 +31,20 @@ const LONG_PRESS_MS = 350
  * 頁面要能捲動，所以滾輪要按住 Ctrl（⌘、觸控板的雙指縮放）才縮放，+／-／0 只在游標停在照片上時有效。
  * holding：回傳 true 時手指按住的拖曳留給外面（手機版編輯按住瞄準加點），不平移。
  * focus：換一個值（seq）就平滑地縮放到那一塊（照片上的比例 0–1）；那一塊已經整個看得到、放得夠大時不動。
+ * aspect（手機版編輯）：縮放區撐滿外面的空間，照片（這個寬高比）置中縮到放得下；放大後照片可以佔滿整個縮放區。
  */
 export function ZoomPane({
   children,
   viewing,
   holding,
   focus,
+  aspect,
 }: {
   children: (zoom: number) => ReactNode
   viewing?: boolean
   holding?: () => boolean
   focus?: ZoomFocus
+  aspect?: number
 }) {
   const { t } = useLang()
   const box = useRef<HTMLDivElement>(null)
@@ -72,8 +75,10 @@ export function ZoomPane({
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
+  /** 照片在縮放區裡（沒放大時）的大小 */
+  const content = aspect ? fitSize(stage, aspect) : stage
   // 照片的寬高比變了（裁切、視窗大小）：放大後的位置重新限制在照片範圍內
-  useEffect(() => setView((v) => clampView(v, stage, stage)), [stage])
+  useEffect(() => setView((v) => clampView(v, stage, content)), [stage, content.w, content.h])
 
   useEffect(() => () => clearTimeout(longTimer.current), [])
 
@@ -82,7 +87,7 @@ export function ZoomPane({
   useEffect(() => {
     if (!focus || stage.w === 0) return
     setView((v) => {
-      const box = { x: (focus.x - 0.5) * stage.w, y: (focus.y - 0.5) * stage.h, w: focus.w * stage.w, h: focus.h * stage.h }
+      const box = { x: (focus.x - 0.5) * content.w, y: (focus.y - 0.5) * content.h, w: focus.w * content.w, h: focus.h * content.h }
       const fit = Math.min(MAX_SCALE, Math.max(1, Math.min(stage.w / Math.max(box.w, 1), stage.h / Math.max(box.h, 1))))
       const scale = focus.keepZoom ? Math.max(fit, v.scale) : fit
       // 已經整個看得到、而且放得比要的還大：不動
@@ -90,7 +95,7 @@ export function ZoomPane({
       if (v.scale >= scale && seen(box.x + box.w / 2, box.w, stage.w, v.x) && seen(box.y + box.h / 2, box.h, stage.h, v.y)) return v
       const cx = box.x + box.w / 2
       const cy = box.y + box.h / 2
-      return clampView({ scale, x: -cx * scale, y: -cy * scale }, stage, stage)
+      return clampView({ scale, x: -cx * scale, y: -cy * scale }, stage, content)
     })
     setGliding(true)
     const timer = setTimeout(() => setGliding(false), 350)
@@ -103,7 +108,7 @@ export function ZoomPane({
     const r = box.current!.getBoundingClientRect()
     return { x: e.clientX - r.left - r.width / 2, y: e.clientY - r.top - r.height / 2 }
   }
-  const zoomBy = (ratio: number, at: Pt = { x: 0, y: 0 }) => setView((v) => moveView(v, at, at, ratio, stage, stage))
+  const zoomBy = (ratio: number, at: Pt = { x: 0, y: 0 }) => setView((v) => moveView(v, at, at, ratio, stage, content))
 
   useEffect(() => {
     const el = box.current!
@@ -198,7 +203,7 @@ export function ZoomPane({
       const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y)
       const mid = (a: Pt, b: Pt): Pt => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 })
       const ratio = dist(now, other) / (dist(finger, other) || 1)
-      setView((v) => moveView(v, mid(finger, other), mid(now, other), ratio, stage, stage))
+      setView((v) => moveView(v, mid(finger, other), mid(now, other), ratio, stage, content))
       return
     }
     if (finger) touches.current.set(e.pointerId, rel(e))
@@ -216,7 +221,7 @@ export function ZoomPane({
     if (!from) return
     const to = rel(e)
     pan.current = to
-    setView((v) => moveView(v, from, to, 1, stage, stage))
+    setView((v) => moveView(v, from, to, 1, stage, content))
   }
   const endPan = (e: ReactPointerEvent) => {
     touches.current.delete(e.pointerId)
@@ -248,7 +253,10 @@ export function ZoomPane({
       onPointerUp={endPan}
       onPointerCancel={endPan}
     >
-      <div className="topo-zoom-inner" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}>
+      <div
+        className="topo-zoom-inner"
+        style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`, ...(aspect && { width: content.w, height: content.h }) }}
+      >
         {children(view.scale)}
       </div>
       <div className="topo-zoom-controls">

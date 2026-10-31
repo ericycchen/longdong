@@ -5741,9 +5741,18 @@ dialog.topo-phone::backdrop {
   background: #000;
 }
 
+/* 縮放區撐滿照片區（照片置中），放大後照片可以佔滿整個畫面 */
 .topo-phone .topo-edit-photo .topo-zoom {
-  width: min(100%, calc(100cqh * var(--fit-aspect)));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
   border-radius: 0;
+}
+
+.topo-phone .topo-zoom-inner {
+  flex: none;
 }
 
 /* 手機用雙指縮放：只留倍率（點了回到整張），在左下；上面是關閉、提交，右下是工具 */

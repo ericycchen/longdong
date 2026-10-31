@@ -928,7 +928,7 @@ function Editor({
   )
 
   const photoPane = (
-    <ZoomPane holding={() => !!aim.current?.on} focus={focus}>
+    <ZoomPane holding={() => !!aim.current?.on} focus={focus} aspect={onClose ? fitAspect : undefined}>
       {(zoom) => (
         <TopoFrame
           photo={photo}
