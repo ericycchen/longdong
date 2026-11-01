@@ -2752,6 +2752,13 @@ a.action {
   align-content: start;
 }
 
+/* 清單名稱旁的收藏愛心 */
+.fav-mark {
+  margin-left: 6px;
+  color: var(--style-rp);
+  vertical-align: -0.05em;
+}
+
 .tool-button {
   display: inline-grid;
   place-items: center;
@@ -4414,6 +4421,11 @@ main.map > div {
 }
 
 /* 區域頁上方：區域形狀不要佔太寬 */
+
+/* 收藏：已收藏時紅色 */
+.tool-button.fav.on {
+  color: var(--style-rp);
+}
 
 /* 回報位置送出後：打勾、綠色 */
 .place-report-button.on {

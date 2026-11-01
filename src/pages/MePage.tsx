@@ -1,16 +1,18 @@
 import { useState, type CSSProperties } from 'react'
 import type { LoadedData } from '../data/dataset'
 import { ActivityChart, GradePyramid } from '../components/Charts'
+import { FavMark } from '../components/FavMark'
 import { GradePill } from '../components/GradePill'
 import { InstallButton } from '../components/InstallPrompt'
+import { RouteRow } from '../components/RouteRow'
 import { FACEBOOK_LOGIN_ENABLED, SignInPrompt } from '../components/SignInPrompt'
 import { relativeTime } from '../format'
 import { LANGS, localName, monthTitle, setLangSetting, useLang, type LangSetting } from '../i18n'
 import { sentRouteIds } from '../personal/model'
 import { gradePyramid, groupByMonth, recentActivity, sendStyles } from '../personal/stats'
 import { ROUTE_TYPES, TypeFilter } from '../components/TypeFilter'
-import type { RouteType } from '../data/schema'
-import { deleteTick, usePersonal } from '../personal/store'
+import type { LocalizedName, Route, RouteType } from '../data/schema'
+import { deleteTick, setFavorite, usePersonal } from '../personal/store'
 import { signOut, useCloud } from '../personal/sync'
 import { deleteMyAccount, rename } from '../social/actions'
 import { NAME_MAX } from '../social/model'
@@ -18,6 +20,8 @@ import { displayName, useSocial } from '../social/store'
 import { useIsAdmin } from '../admin'
 import { href, useRouteLink } from '../router'
 import { APP_VERSION, formatVersion } from '../version'
+
+type Tab = 'ticks' | 'favorites'
 
 /** 整頁是一張卡片（和路線卡片同一套）：品牌色從上方往下淡出、左邊一條色條 */
 const CARD_STYLE = { '--area-color': 'var(--brand)' } as CSSProperties
@@ -39,7 +43,7 @@ export function MePage({ data, offline }: { data: LoadedData; offline: boolean }
         <section className="card intro-card">
           <h2>{t('me.introTitle')}</h2>
           <ul className="feature-list">
-            {(['log', 'social', 'sync'] as const).map((f) => (
+            {(['log', 'fav', 'social', 'sync'] as const).map((f) => (
               <li key={f}>
                 <strong>{t(`me.feature.${f}`)}</strong>
                 <span>{t(`me.feature.${f}Desc`)}</span>
@@ -80,6 +84,7 @@ function SignedIn({ data, offline, uid, email }: { data: LoadedData; offline: bo
   const cloud = useCloud()
   const social = useSocial()
   const { lang, t } = useLang()
+  const [tab, setTab] = useState<Tab>('ticks')
   const [settings, setSettings] = useState(false)
   const admin = useIsAdmin()
   const [pyramidTypes, setPyramidTypesState] = useState(loadPyramidTypes)
@@ -94,6 +99,8 @@ function SignedIn({ data, offline, uid, email }: { data: LoadedData; offline: bo
   const { link } = useRouteLink()
 
   const lookup = (id: string) => data.routeById.get(id)
+  // 最愛可能是區域、分區或路線：依序列出，和清單上一樣標愛心
+  const favorites = [...personal.favorites].sort((a, b) => favoriteLevel(data, a) - favoriteLevel(data, b))
   const name = displayName(social.profiles, uid)
   // 完攀過的路線與最好的方式：攀登紀錄加上路線清單勾選的
   const sends = sendStyles(personal.ticks, personal.best)
@@ -195,51 +202,114 @@ function SignedIn({ data, offline, uid, email }: { data: LoadedData; offline: bo
         </div>
 
         <div className="me-log">
-          <h2>{t('me.ticks')}</h2>
-          {personal.ticks.length === 0 ? (
-            <p className="empty muted">{t('me.noTicks')}</p>
-          ) : (
-            groupByMonth(personal.ticks).map((g) => (
-              <section key={g.key} className="timeline">
-                <h3>{monthTitle(g.key, lang)}</h3>
-                <ul className="list-card">
-                  {g.ticks.map((tick) => {
-                    const r = lookup(tick.routeId)?.route
-                    return (
-                      <li key={tick.id} className="timeline-item">
-                        <span className="timeline-day">
-                          <strong>{Number(tick.date.slice(8, 10))}</strong>
-                          {t('me.dayUnit') && <span>{t('me.dayUnit')}</span>}
-                        </span>
-                        <a className="timeline-body" href={link(tick.routeId)}>
-                          <span className="timeline-title">
-                            {r
-                              ? `${r.number ? `#${r.number} ` : ''}${localName(r.name, lang).main}`
-                              : t('me.routeMissing', { id: tick.routeId })}
+          <div className="segmented" role="tablist">
+            <button role="tab" aria-selected={tab === 'ticks'} onClick={() => setTab('ticks')}>
+              {t('me.tab.ticks')}
+            </button>
+            <button role="tab" aria-selected={tab === 'favorites'} onClick={() => setTab('favorites')}>
+              {t('me.tab.favs')}
+              {favorites.length > 0 && ` ${favorites.length}`}
+            </button>
+          </div>
+
+          {tab === 'ticks' &&
+            (personal.ticks.length === 0 ? (
+              <p className="empty muted">{t('me.noTicks')}</p>
+            ) : (
+              groupByMonth(personal.ticks).map((g) => (
+                <section key={g.key} className="timeline">
+                  <h3>{monthTitle(g.key, lang)}</h3>
+                  <ul className="list-card">
+                    {g.ticks.map((tick) => {
+                      const r = lookup(tick.routeId)?.route
+                      return (
+                        <li key={tick.id} className="timeline-item">
+                          <span className="timeline-day">
+                            <strong>{Number(tick.date.slice(8, 10))}</strong>
+                            {t('me.dayUnit') && <span>{t('me.dayUnit')}</span>}
                           </span>
-                          <span className="timeline-meta">
-                            <span className={`style-tag style-${tick.style}`}>{t(`style.${tick.style}`)}</span>
-                            {tick.note && <span className="muted">{tick.note}</span>}
-                          </span>
-                        </a>
-                        <GradePill grade={r?.grade} value={r?.gradeValue} size="sm" />
-                        <button
-                          className="icon-button small"
-                          aria-label={t('tick.deleteAria')}
-                          onClick={() => confirm(t('tick.confirmDelete')) && deleteTick(tick.id)}
-                        >
-                          ×
-                        </button>
-                      </li>
-                    )
-                  })}
-                </ul>
-              </section>
-            ))
-          )}
+                          <a className="timeline-body" href={link(tick.routeId)}>
+                            <span className="timeline-title">
+                              {r
+                                ? `${r.number ? `#${r.number} ` : ''}${localName(r.name, lang).main}`
+                                : t('me.routeMissing', { id: tick.routeId })}
+                            </span>
+                            <span className="timeline-meta">
+                              <span className={`style-tag style-${tick.style}`}>{t(`style.${tick.style}`)}</span>
+                              {tick.note && <span className="muted">{tick.note}</span>}
+                            </span>
+                          </a>
+                          <GradePill grade={r?.grade} value={r?.gradeValue} size="sm" />
+                          <button
+                            className="icon-button small"
+                            aria-label={t('tick.deleteAria')}
+                            onClick={() => confirm(t('tick.confirmDelete')) && deleteTick(tick.id)}
+                          >
+                            ×
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </section>
+              ))
+            ))}
+
+          {tab === 'favorites' &&
+            (favorites.length === 0 ? (
+              <p className="empty muted">{t('me.noFavs')}</p>
+            ) : (
+              <ul className="list-card">
+                {favorites.map((id) => {
+                  const ref = lookup(id)
+                  const area = data.areaById.get(id)
+                  const sector = data.sectorById.get(id)
+                  return ref ? (
+                    <RouteRow key={id} item={ref} showPlace />
+                  ) : area ? (
+                    <PlaceRow key={id} href={href.area(id)} name={area.name} routes={area.sectors.flatMap((s) => s.routes)} />
+                  ) : sector ? (
+                    <PlaceRow key={id} href={href.sector(id)} name={sector.sector.name} place={sector.area.name} routes={sector.sector.routes} />
+                  ) : (
+                    <li key={id} className="timeline-item">
+                      <span className="timeline-body muted small">{t('me.routeMissing', { id })}</span>
+                      <button className="icon-button small" aria-label={t('me.removeFav')} onClick={() => setFavorite(id, false)}>
+                        ×
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            ))}
         </div>
       </div>
     </article>
+  )
+}
+
+/** 最愛的排列：區域、分區、路線（找不到的放最後） */
+function favoriteLevel(data: LoadedData, id: string): number {
+  return data.areaById.has(id) ? 0 : data.sectorById.has(id) ? 1 : data.routeById.has(id) ? 2 : 3
+}
+
+/** 最愛的區域、分區：和路線列同樣子（名稱、所在位置、路線數） */
+function PlaceRow({ href, name, place, routes }: { href: string; name: LocalizedName; place?: LocalizedName; routes: Route[] }) {
+  const { lang, t } = useLang()
+  return (
+    <li>
+      <a className="route-row" href={href}>
+        <span className="route-name">
+          <span className="zh">
+            {localName(name, lang).main}
+            <FavMark />
+          </span>
+          {place && <span className="place">{localName(place, lang).main}</span>}
+          <span className="route-row-facts">
+            <span className="route-row-text">{t('count.routes', { n: routes.filter((r) => !r.isFixture).length })}</span>
+          </span>
+        </span>
+      </a>
+    </li>
   )
 }
 

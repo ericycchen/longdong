@@ -1,5 +1,5 @@
 /**
- * 個人資料（攀登紀錄、路線清單）只存在使用者裝置上。
+ * 個人資料（收藏、攀登紀錄）只存在使用者裝置上。
  *
  * 每筆紀錄都有唯一 key 與 updatedAt，刪除以 deleted 標記保留（tombstone），
  * 這樣匯入備份、之後同步到雲端時，都能用「較新者為準」合併，不會把已刪除的資料救回來。
@@ -49,6 +49,11 @@ interface Syncable {
   deleted?: boolean
 }
 
+export interface Favorite extends Syncable {
+  /** 收藏的路線、區域或分區的 ID（欄位名稱沿用，雲端的資料不用改） */
+  routeId: string
+}
+
 /** 攀登紀錄備註的字數上限（UTF-16 字元數，與 firebase/database.rules.json 的 ticks.note 相同） */
 export const NOTE_MAX = 1000
 
@@ -71,6 +76,7 @@ export interface PersonalExport {
   format: 'longdong-personal'
   version: 1
   exportedAt: string
+  favorites: Favorite[]
   ticks: Tick[]
   /** 路線清單勾選的最佳攀登方式（舊的匯出檔沒有） */
   best?: Best[]
@@ -116,4 +122,9 @@ export function daysAgo(n: number, now = new Date()): string {
 export function today(now = new Date()): string {
   const p = (n: number) => String(n).padStart(2, '0')
   return `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`
+}
+
+/** 最愛的排在前面，其他照原本的順序（首頁的區域、區域頁的分區、路線清單） */
+export function favoritesFirst<T>(items: T[], favorites: Set<string>, id: (x: T) => string = (x) => (x as { id: string }).id): T[] {
+  return [...items.filter((x) => favorites.has(id(x))), ...items.filter((x) => !favorites.has(id(x)))]
 }

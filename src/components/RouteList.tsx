@@ -15,6 +15,8 @@ import {
   type ListView,
   type SortKey,
 } from '../listView'
+import { favoritesFirst } from '../personal/model'
+import { usePersonal } from '../personal/store'
 import { routeKey, summarize } from '../social/model'
 import { useSocial } from '../social/store'
 import { RouteRow } from './RouteRow'
@@ -23,7 +25,7 @@ import { TypeFilter } from './TypeFilter'
 const SAFETY: Safety[] = ['green', 'yellow', 'red']
 
 /**
- * 可排序、篩選的路線清單。
+ * 可排序、篩選的路線清單；最愛的排在最上面（其餘照排序）。
  * 電腦版是表格（點欄位標題排序，篩選條件直接展開）；手機版是原本的清單，排序用下拉選單、篩選收合在按鈕裡。
  * defaultLabel：「預設順序」在這個清單代表什麼（區域內是編號，搜尋是相關度）；limit：篩選、排序後最多顯示幾條。
  */
@@ -42,8 +44,13 @@ export function RouteList({
   const wide = useWide()
   const view = useListView()
   const ratings = useSocial().ratings
+  const favorites = usePersonal().favorites
   const [open, setOpen] = useState(false)
-  const shown = applyView(items, view, (id) => summarize(ratings[routeKey(id)])?.average)
+  const shown = favoritesFirst(
+    applyView(items, view, (id) => summarize(ratings[routeKey(id)])?.average),
+    favorites,
+    (item) => item.route.id,
+  )
   const visible = limit ? shown.slice(0, limit) : shown
   const count = filterCount(view.filter)
 

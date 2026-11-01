@@ -9,6 +9,10 @@ import { useInlineEditing } from '../edit/backGuard'
 import { CommunityText } from '../edit/CommunityText'
 import { TitleTools } from '../components/TitleTools'
 import type { ToolScope } from '../edit/PageTools'
+import { FavMark } from '../components/FavMark'
+import { favoritesFirst } from '../personal/model'
+import { usePersonal } from '../personal/store'
+import { useCloud } from '../personal/sync'
 import { placeShareText, siteUrl } from '../share'
 import { textTarget } from '../edit/textEdits'
 import { wallTarget } from '../map/shapes'
@@ -22,7 +26,7 @@ import { href } from '../router'
 const InlineTopoEditor = lazy(() => import('../topo/TopoEditor').then((m) => ({ default: m.InlineTopoEditor })))
 
 /**
- * 區域頁：列出分區，點進去才看路線（只有一個分區時直接顯示路線）。
+ * 區域頁：列出分區（最愛的排在前面），點進去才看路線（只有一個分區時直接顯示路線）。
  * 上方是標題卡（PageHero）：區域的顏色，右側是這個區域的地圖形狀。
  * 電腦版畫面寬：標題區多放英文名、難度範圍、Bolt 數、路線種類、需要注意的路線數與整區的難度分佈；
  * 分區也多放英文名、難度範圍、種類與需要注意的路線數。
@@ -31,6 +35,8 @@ const InlineTopoEditor = lazy(() => import('../topo/TopoEditor').then((m) => ({ 
 export function AreaPage({ data, id }: { data: LoadedData; id: string }) {
   const { lang, t } = useLang()
   const wide = useWide()
+  const signedIn = useCloud().status === 'signed-in'
+  const favorites = usePersonal().favorites
   const [editing, setEditing] = useInlineEditing(id)
   const area = data.areaById.get(id)
   if (!area) return <NotFound />
@@ -61,8 +67,10 @@ export function AreaPage({ data, id }: { data: LoadedData; id: string }) {
         tools={
           <TitleTools
             data={data}
+            favoriteId={area.id}
             report={{ area }}
             share={{ url: siteUrl(href.area(area.id)), text: placeShareText(area, undefined, lang, t) }}
+            signedIn={signedIn}
             scope={areaScope}
             inlineEdit={wide ? undefined : { text: () => setEditing({ kind: 'text' }) }}
           />
@@ -105,9 +113,9 @@ export function AreaPage({ data, id }: { data: LoadedData; id: string }) {
         <SectorRoutes data={data} sector={area.sectors[0]} onEditTopo={wide ? undefined : (photo) => setEditing({ kind: 'topo', photo })} />
       ) : (
         <ul className="area-list">
-          {area.sectors.map((sector) => (
+          {favoritesFirst(area.sectors, favorites).map((sector) => (
             <li key={sector.id}>
-              <SectorCard sector={sector} color={areaSectorColor(area, sector)} />
+              <SectorCard sector={sector} color={areaSectorColor(area, sector)} favorite={favorites.has(sector.id)} />
             </li>
           ))}
         </ul>
@@ -116,7 +124,7 @@ export function AreaPage({ data, id }: { data: LoadedData; id: string }) {
   )
 }
 
-function SectorCard({ sector, color }: { sector: Sector; color?: string }) {
+function SectorCard({ sector, color, favorite }: { sector: Sector; color?: string; favorite: boolean }) {
   const { lang, t } = useLang()
   const routes = sector.routes.filter((r) => !r.isFixture)
   const range = gradeRange(routes)
@@ -126,6 +134,7 @@ function SectorCard({ sector, color }: { sector: Sector; color?: string }) {
       <span className="area-info">
         <span className="sector-name">
           {name.main}
+          {favorite && <FavMark />}
         </span>
         {name.sub && <span className="en">{name.sub}</span>}
         <span className="area-count">
@@ -170,6 +179,7 @@ export function areaSectorColor(area: Area, sector: Sector): string | undefined 
 export function SectorPage({ data, id }: { data: LoadedData; id: string }) {
   const { lang, t } = useLang()
   const wide = useWide()
+  const signedIn = useCloud().status === 'signed-in'
   const [editing, setEditing] = useInlineEditing(id)
   const found = data.sectorById.get(id)
   if (!found) return <NotFound />
@@ -190,8 +200,10 @@ export function SectorPage({ data, id }: { data: LoadedData; id: string }) {
         tools={
           <TitleTools
             data={data}
+            favoriteId={sector.id}
             report={{ area, sector }}
             share={{ url: siteUrl(href.sector(sector.id)), text: placeShareText(area, sector, lang, t) }}
+            signedIn={signedIn}
             scope={{ areaId: area.id, map: { target: wallTarget(sector.id), label: t('edit.sectorShapes') }, sectors: [sector], topoEdit: true }}
             inlineEdit={wide ? undefined : { topo: () => setEditing({ kind: 'topo' }) }}
           />
