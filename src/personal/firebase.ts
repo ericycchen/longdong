@@ -86,6 +86,12 @@ export async function signInWith(
   name: ProviderName,
   confirmLink: (email: string, existing: ProviderName) => boolean,
 ): Promise<void> {
+  // 從主畫面開啟的 App：登入視窗開在另一個瀏覽器分頁，Android 上登入完成後 App 收不到結果（要重新整理才看得到），改用整頁跳轉。
+  // 登入在網站自己的網域完成（authDomain），整頁跳轉不會被跨網域保護擋掉
+  if (matchMedia('(display-mode: standalone)').matches) {
+    await signInWithRedirect(auth, makeProvider(name))
+    return
+  }
   try {
     await signInWithPopup(auth, makeProvider(name))
   } catch (err) {

@@ -547,6 +547,30 @@ try {
   // ── 手機（觸控）：單指點、拖、刪除點，雙指捏合縮放，放大後單指平移 ──
   const phone = await newContext(undefined, { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 })
   await signIn(phone.page, 'phone@example.com')
+  // 從主畫面開啟的 App（display-mode: standalone）：登入整頁跳轉、不開視窗，回到「我的」直接是已登入（不用重新整理）
+  // 模擬器的登入頁在手機寬度排不下輸入框；是不是主畫面 App 和寬度無關，用預設的寬度
+  const homeApp = await newContext()
+  await homeApp.ctx.addInitScript(`
+    const mm = window.matchMedia.bind(window)
+    window.matchMedia = (q) => {
+      const list = mm(q)
+      if (q.includes('display-mode: standalone')) Object.defineProperty(list, 'matches', { value: true })
+      return list
+    }
+  `)
+  let homeAppPopups = 0
+  homeApp.page.on('popup', () => homeAppPopups++)
+  await homeApp.page.goto(base + 'me')
+  await homeApp.page.click('.signin-prompt .action.primary')
+  await homeApp.page.waitForURL(/emulator\/auth/, { timeout: 20000 })
+  await homeApp.page.waitForLoadState()
+  await homeApp.page.click('text=Add new account')
+  await homeApp.page.fill('#email-input', 'homeapp@example.com')
+  await homeApp.page.fill('#display-name-input', 'homeapp')
+  await homeApp.page.click('#sign-in')
+  const homeAppSignedIn = await homeApp.page.waitForSelector('.me-m .profile-head', { timeout: 20000 }).then(() => true, () => false)
+  check('主畫面 App 登入：整頁跳轉（不開視窗），回到「我的」直接是已登入', homeAppSignedIn && homeAppPopups === 0 && new URL(homeApp.page.url()).pathname.endsWith('/me'), homeApp.page.url())
+  await homeApp.ctx.close()
   await put('v2/topos/e2ephone', { sector: topoSector.id, width: 2000, height: 1200, image: 'topos/seed/e2ephone.jpg', uid: 'seed', createdAt: Date.now() })
   await phone.page.goto(base + 'edit/topo/e2ephone')
   await phone.page.waitForSelector('dialog.topo-phone[open] .topo-phone-title')
