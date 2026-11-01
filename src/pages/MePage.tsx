@@ -292,12 +292,13 @@ function favoriteLevel(data: LoadedData, id: string): number {
   return data.areaById.has(id) ? 0 : data.sectorById.has(id) ? 1 : data.routeById.has(id) ? 2 : 3
 }
 
-/** 最愛的區域、分區：和路線列同樣子（名稱、所在位置、路線數） */
+/** 最愛的區域、分區：和路線列同樣子（編號欄空著，名稱和路線對齊；所在位置、路線數） */
 function PlaceRow({ href, name, place, routes }: { href: string; name: LocalizedName; place?: LocalizedName; routes: Route[] }) {
   const { lang, t } = useLang()
   return (
     <li>
       <a className="route-row" href={href}>
+        <span className="route-no" />
         <span className="route-name">
           <span className="zh">
             {localName(name, lang).main}

@@ -1197,7 +1197,7 @@ a.action {
 }
 
 .stars-static .dim {
-  opacity: 0.25;
+  color: var(--faint);
 }
 
 .rating-bars {
@@ -1255,7 +1255,7 @@ a.action {
   padding: 2px;
   background: none;
   border: 0;
-  color: var(--border);
+  color: var(--faint);
   cursor: pointer;
   transition: transform 0.08s;
 }
@@ -3618,7 +3618,7 @@ main.map > div {
   display: block;
   height: 6px;
   border-radius: 3px;
-  background: var(--surface-2);
+  background: color-mix(in srgb, var(--faint) 40%, transparent);
   overflow: hidden;
 }
 

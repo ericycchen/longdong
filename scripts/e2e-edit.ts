@@ -1477,6 +1477,8 @@ try {
   check('「我的」整頁一張卡片（和路線卡片同一套）：裡面不再一格一格框起來', (await rp.locator('main .me-m.route-m').count()) === 1 && meBoxes === 0, `${meBoxes}`)
   await rp.getByRole('tab', { name: /最愛/ }).click()
   const favRow = rp.locator('.list-card .route-row', { hasText: favArea.name.zh })
+  const [nameBox, rowBox] = [(await favRow.locator('.route-name').boundingBox())!, (await favRow.boundingBox())!]
+  check('「我的」最愛：區域的名稱和路線列一樣在名稱欄（不擠在左邊的編號欄）', nameBox.width > rowBox.width / 2, `${nameBox.width} / ${rowBox.width}`)
   check('「我的」最愛：區域也列出來（和路線同樣子、有愛心、路線數）', (await favRow.count()) === 1 && (await favRow.locator('.fav-mark').count()) === 1 && /\d+ 條路線/.test((await favRow.textContent()) ?? ''), (await rp.locator('.list-card').textContent()) ?? '')
   await rp.goto(base + `area/${favArea.id}`)
   await rp.waitForSelector('.page-tools .tool-button.fav.on')
@@ -1489,8 +1491,9 @@ try {
   await rp.waitForSelector('.page-tools .tool-button.fav.on')
   await rp.goto(base + `sector/${topoSector.id}`)
   const topRow = rp.locator('.route-list .route-row').first()
-  await topRow.waitFor()
-  check('最愛的路線在分區清單排最上面、有愛心（不是星號）', ((await topRow.textContent()) ?? '').includes(favRoute.name.zh) && (await topRow.locator('.fav-mark').count()) === 1 && !((await topRow.locator('.zh').textContent()) ?? '').includes('★'), (await topRow.textContent()) ?? '')
+  // 個人資料載入後才排序、標愛心
+  const favOnTop = await until(async () => ((await topRow.textContent()) ?? '').includes(favRoute.name.zh) && (await topRow.locator('.fav-mark').count()) === 1 ? true : undefined)
+  check('最愛的路線在分區清單排最上面、有愛心（不是星號）', favOnTop === true && !((await topRow.locator('.zh').textContent()) ?? '').includes('★'), (await topRow.textContent()) ?? '')
   await rp.goto(base + `route/${favRoute.id}`)
   await tool('已加入最愛').click()
   await rp.waitForSelector('.page-tools .tool-button.fav:not(.on)')
@@ -1603,6 +1606,25 @@ try {
   const ratingSheet = rp.locator('dialog.sheet[open]')
   await ratingSheet.locator('.star-picker').waitFor()
   check('評分視窗：沒有「你的評分」「刪除我的評分」', !/你的評分|刪除我的評分|你覺得/.test((await ratingSheet.textContent()) ?? ''))
+  // 還沒選的星星、平均下面沒亮的星星：和視窗底色的對比至少 3:1（深色底上看得到）
+  const starContrast = (await rp.evaluate(`(() => {
+    const sheet = document.querySelector('dialog.sheet[open]')
+    const rgb = (c) => (c.match(/[\\d.]+/g) ?? []).slice(0, 3).map(Number)
+    const lum = (c) => {
+      const [r, g, b] = rgb(c).map((v) => (v / 255 <= 0.03928 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4))
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b
+    }
+    const bg = getComputedStyle(sheet).backgroundColor
+    const ratio = (el) => {
+      if (!el) return 0
+      const s = getComputedStyle(el)
+      if (Number(s.opacity) < 1) return 0
+      const [a, b] = [lum(s.color), lum(bg)].sort((x, y) => y - x)
+      return (a + 0.05) / (b + 0.05)
+    }
+    return { picker: ratio(sheet.querySelector('.star-picker button:not(.on)')), dim: ratio(sheet.querySelector('.stars-static .dim')) }
+  })()`)) as { picker: number; dim: number }
+  check('評分視窗：沒選的星星看得到（對比 ≥ 3）', starContrast.picker >= 3 && starContrast.dim >= 3, JSON.stringify(starContrast))
   const myStars = async () => Object.values((await read<Record<string, { stars: number }>>(`v2/ratings/${rk}`)) ?? {}).map((r) => r.stars).sort().join()
   const ratedBefore = await myStars()
   await ratingSheet.locator('.star-picker button').nth(2).click()
