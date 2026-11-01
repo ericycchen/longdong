@@ -648,7 +648,7 @@ try {
   const lineColor = await phone.page.locator('.topo-route.on .topo-line').first().evaluate((el) => getComputedStyle(el).stroke)
   const handleStyles = await phoneHandles().evaluateAll((els) => els.map((el) => `${getComputedStyle(el).fill}|${getComputedStyle(el).stroke}`))
   check('手機：點是小小的實心點、和線同色（起點也一樣、沒有白框），手指按得到的範圍比較大', ((await phoneHandles().first().boundingBox())!.width) <= 12 && ((await phone.page.locator('.topo-hits circle').first().boundingBox())!.width) >= 40 && handleStyles.every((v) => v === `${lineColor}|none`), `${lineColor} / ${handleStyles.join(' ')}`)
-  const whiteFrames = await phone.page.locator('.topo-badge rect, .topo-bolt rect, .topo-start, .topo-handles circle').evaluateAll((els) => els.filter((el) => /255, 255, 255|#fff/.test(getComputedStyle(el).stroke)).length)
+  const whiteFrames = await phone.page.locator('.topo-badge rect, .topo-bolt rect, .topo-dot, .topo-handles circle').evaluateAll((els) => els.filter((el) => /255, 255, 255|#fff/.test(getComputedStyle(el).stroke)).length)
   check('手機：所有的標記（編號、bolt、起點、點）都沒有白框', whiteFrames === 0, `${whiteFrames}`)
   check('手機：編輯時線上不顯示難度、名稱（不和點疊在一起）', (await phone.page.locator('.topo-phone .topo-note').count()) === 0)
   // 按住不動：出現放大鏡，滑動對準，放開才放點（只放一個）

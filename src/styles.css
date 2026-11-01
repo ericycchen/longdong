@@ -4644,10 +4644,6 @@ body:has(.sim-banner) main.map:not(.shell main.map) {
   z-index: 2;
 }
 
-.route-topo .topo-halo {
-  display: none;
-}
-
 .route-topo .topo-route.dim {
   opacity: 0.4;
 }
@@ -4928,7 +4924,7 @@ dialog.topo-full[open] {
   user-select: none;
 }
 
-/* 標記的風格：深紅色的平滑曲線，起點一個圓點；編號、anchor 是紅色的圓角牌，bolt 是藍色的圓角牌（都沒有白框）；說明是白字加深色描邊 */
+/* 標記的風格：深紅色的平滑曲線，起點、終點各一個同色的實心圓點，線沒有白邊；編號、anchor 是紅色的圓角牌，bolt 是藍色的圓角牌（都沒有白框）；說明是白字加深色描邊 */
 .topo-route {
   --topo-line: #c8102e;
   --topo-pill: #c8102e;
@@ -4969,24 +4965,14 @@ dialog.topo-full[open] {
   stroke: transparent;
 }
 
-/* 線外面一圈淡淡的白邊：深紅色在深色的岩壁上也看得清楚 */
-.topo-halo {
-  stroke: rgba(255, 255, 255, 0.55);
-}
-
 .topo-line {
   stroke: var(--topo-line);
 }
 
-.topo-start {
+/* 起點、終點：同色的實心圓點 */
+.topo-dot {
   fill: var(--topo-line);
   stroke: none;
-}
-
-/* 終點：空心圓圈（起點是實心圓點） */
-.topo-end {
-  fill: #141414;
-  stroke: var(--topo-line);
 }
 
 g.topo-route.link {
@@ -5002,11 +4988,6 @@ g.topo-route.link {
 g.topo-route.link:is(:hover, :focus-visible) {
   opacity: 1;
   outline: none;
-}
-
-/* 鍵盤選到時不用方框，線外面的白邊加粗 */
-g.topo-route.link:focus-visible .topo-halo {
-  stroke: #fff;
 }
 
 .topo-badge rect {

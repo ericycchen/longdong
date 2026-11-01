@@ -352,9 +352,10 @@ export function TopoLines({
       {ids.map((id) => {
         const line = lineOf(id)
         const start = line?.[0]
-        // 終點（看的時候）：空心圓圈，和實心的起點分得出來；編輯時每個點都有把手，不另外畫
+        // 終點（看的時候）：和起點一樣的實心圓點；編輯時每個點都有把手，不另外畫
         const end = !editing && line && line.length >= 2 ? line[line.length - 1] : undefined
         const on = id === highlight
+        const dotR = (editing ? 3 : on ? 4 : 3.2) * k
         const cls = clsOf(id)
         const body = (
           <>
@@ -363,13 +364,12 @@ export function TopoLines({
               return (
                 <g key={i}>
                   <path className="topo-hit" d={d} strokeWidth={18 * k} />
-                  <path className="topo-halo" d={d} strokeWidth={(editing ? (on ? 3.6 : 3) : on ? 7 : 5.5) * k} />
                   <path className="topo-line" d={d} strokeWidth={(editing ? (on ? 2 : 1.6) : on ? 4 : 2.8) * k} />
                 </g>
               )
             })}
-            {start && !(editing && on) && <circle className="topo-start" cx={start[0]} cy={start[1]} r={(editing ? 3 : on ? 4 : 3.2) * k} strokeWidth={(editing ? 1 : 1.5) * k} />}
-            {end && <circle className="topo-end" cx={end[0]} cy={end[1]} r={(on ? 3.6 : 3) * k} strokeWidth={(on ? 1.8 : 1.4) * k} />}
+            {start && !(editing && on) && <circle className="topo-dot" cx={start[0]} cy={start[1]} r={dotR} />}
+            {end && <circle className="topo-dot" cx={end[0]} cy={end[1]} r={dotR} />}
           </>
         )
         return pick ? (

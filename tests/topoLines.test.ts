@@ -19,11 +19,12 @@ const render = (k: number, extra: object = {}) => renderToStaticMarkup(createEle
 const count = (html: string, re: RegExp) => (html.match(re) ?? []).length
 
 describe('Topo 標記的自動排版（畫面上的大小）', () => {
-  it('看的時候標出起點（實心）與終點（空心）；編輯時不畫終點', () => {
-    expect(count(render(1), /class="topo-start"/g)).toBe(2)
-    expect(count(render(1), /class="topo-end"/g)).toBe(2)
-    expect(render(1)).toContain('class="topo-end" cx="600" cy="100"')
-    expect(count(render(1, { editing: true }), /class="topo-end"/g)).toBe(0)
+  it('看的時候起點、終點都是同樣大小的實心圓點；線沒有白邊；編輯時不畫終點', () => {
+    expect(count(render(1), /class="topo-dot"/g)).toBe(4)
+    expect(render(1)).toContain('class="topo-dot" cx="600" cy="100" r="3.2"')
+    expect(render(1)).toContain('class="topo-dot" cx="600" cy="900" r="3.2"')
+    expect(render(1)).not.toContain('topo-halo')
+    expect(count(render(1, { editing: true }), /class="topo-dot"/g)).toBe(2)
   })
 
   it('solo：說明不避開其他路線的線，貼在編號旁邊', () => {
