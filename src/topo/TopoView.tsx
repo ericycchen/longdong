@@ -126,9 +126,6 @@ const SMALL_PILL = 0.8
 const SMALL_SPOTS = [0.14, 0.22, 0.08, 0.3]
 /** 線在畫面上比這個短（螢幕像素）的路線，編號最後才放；選到的路線不受限 */
 const MIN_LABEL_LINE_PX = 40
-/** 線在畫面上這麼長才多顯示難度、再長才多顯示名稱；選到的路線一律顯示 */
-const GRADE_LINE_PX = 110
-const NAME_LINE_PX = 240
 /** 編輯時線上的點（把手）佔的範圍（半徑，螢幕像素）：牌子不蓋在上面 */
 const EDIT_POINT_PX = 12
 /** 編號牌放在線上的候選位置（占全長的比例）：先放正中間，不行再往兩邊找 */
@@ -228,9 +225,27 @@ export function TopoLines({
       if (pill) plan.get(id)!.bolts.push({ pos, at, anchor, label, pill })
     }
   }
-  // 2. 路線編號牌（solo 時其他路線的編號在說明之後才放，見 4.）
+  // 2. 路線編號牌與難度、名稱：編號和說明綁在一起放（說明緊貼在編號旁邊），沿著線找空位；
+  //    先找放得下完整說明（難度＋名稱）的位置，真的放不下才少一點（換行、只留難度、只有編號）。
+  //    solo 時其他路線的編號在 bolt 說明之後才放，見 4.
   /** 線在畫面上很短（只畫了一小段、縮得很小）的路線：其他編號都放好之後才放，放得下才標 */
   const short = (id: string) => id !== highlight && !!lineOf(id) && lineOf(id)!.length >= 2 && length.get(id)! < MIN_LABEL_LINE_PX
+  /** 說明的各種版本：難度＋名稱一行、名稱換行、只有難度、沒有說明 */
+  const noteVersions = (id: string, small: boolean): string[][] => {
+    const i = info?.get(id)
+    const versions: string[][] = []
+    const add = (v: (string | undefined)[]) => {
+      const lines = v.filter((x): x is string => !!x)
+      if (!versions.some((o) => o.join('|') === lines.join('|'))) versions.push(lines)
+    }
+    if (i && !editing && !small) {
+      add([i.grade, i.name])
+      for (const wpx of WRAP_PX) add([i.grade, ...(i.name ? wrapText(i.name, NOTE_FONT, wpx) : [])])
+      add([i.grade])
+    }
+    add([])
+    return versions
+  }
   const placePill = (id: string, small: boolean) => {
     const text = labels.get(id)
     if (!text) return
@@ -257,55 +272,51 @@ export function TopoLines({
       spots = [centeredBox([low[0], low[1] + h], w, h), centeredBox([low[0], low[1] - h], w, h)]
     }
     const entry = plan.get(id)!
-    entry.pill = placer.place(spots, id === highlight && !editing)
     entry.small = small
+    const g = 4 * k
+    for (const lines of noteVersions(id, small)) {
+      const nw = Math.max(0, ...lines.map((t) => textWidth(t, NOTE_FONT))) * k
+      const nh = lines.length * NOTE_LINE * k
+      // 說明的位置：編號的右邊、左邊、下面、上面（都貼著編號）
+      const notesBeside = (p: Box): Box[] =>
+        lines.length === 0
+          ? []
+          : [
+              { x: p.x + p.w + g, y: p.y + p.h / 2 - nh / 2, w: nw, h: nh },
+              { x: p.x - nw - g, y: p.y + p.h / 2 - nh / 2, w: nw, h: nh },
+              { x: p.x + p.w / 2 - nw / 2, y: p.y + p.h + g, w: nw, h: nh },
+              { x: p.x + p.w / 2 - nw / 2, y: p.y - nh - g, w: nw, h: nh },
+            ]
+      // 說明優先放在不壓到線的位置；都沒有才壓在線上
+      for (const avoid of [true, false]) {
+        for (const pill of spots) {
+          if (!placer.fits(pill)) continue
+          if (lines.length === 0) {
+            placer.reserve(pill)
+            entry.pill = pill
+            return
+          }
+          const note = notesBeside(pill).find((n) => placer.fits(n) && (!avoid || !placer.onLine(n)))
+          if (note) {
+            placer.reserve(pill)
+            placer.reserve(note)
+            entry.pill = pill
+            entry.note = { box: note, lines }
+            return
+          }
+        }
+      }
+    }
+    // 選到的路線一定要標（看的時候）：放不下也放在第一個位置
+    if (id === highlight && !editing) entry.pill = placer.place(spots, true)
   }
   const mains = priority.filter((id) => !solo || id === highlight)
   for (const id of mains) if (!short(id)) placePill(id, false)
   for (const id of mains) if (short(id)) placePill(id, false)
-  // 3. 多的說明：編號牌下面的難度與名稱、bolt 旁邊的材質與年份（空間夠才顯示）
+  // 3. bolt 旁邊的材質與年份（空間夠才顯示）
   for (const id of editing ? [] : priority) {
     const entry = plan.get(id)!
     const i = info?.get(id)
-    if (entry.pill && i) {
-      const len = length.get(id)!
-      const grade = id === highlight || len >= GRADE_LINE_PX ? i.grade : undefined
-      const name = id === highlight || len >= NAME_LINE_PX ? i.name : undefined
-      // 版本：難度＋名稱一行、名稱換行，最後只有難度
-      const versions: string[][] = []
-      const add = (v: (string | undefined)[]) => {
-        const lines = v.filter((x): x is string => !!x)
-        if (lines.length && !versions.some((o) => o.join('|') === lines.join('|'))) versions.push(lines)
-      }
-      add([grade, name])
-      for (const wpx of WRAP_PX) add([grade, ...(name ? wrapText(name, NOTE_FONT, wpx) : [])])
-      add([grade])
-      const pill = entry.pill
-      const got = placer.placeFirst(
-        versions.map((lines) => {
-          const w = Math.max(...lines.map((t) => textWidth(t, NOTE_FONT))) * k
-          const h = lines.length * NOTE_LINE * k
-          const cx = pill.x + pill.w / 2
-          const cy = pill.y + pill.h / 2
-          const g = 4 * k
-          return {
-            value: lines,
-            candidates: [
-              { x: cx - w / 2, y: pill.y + pill.h + g, w, h },
-              { x: cx - w / 2, y: pill.y - h - g, w, h },
-              { x: pill.x + pill.w + g, y: cy - h / 2, w, h },
-              { x: pill.x - w - g, y: cy - h / 2, w, h },
-              { x: pill.x + pill.w + g, y: pill.y + pill.h + g, w, h },
-              { x: pill.x - w - g, y: pill.y + pill.h + g, w, h },
-              { x: pill.x + pill.w + g, y: pill.y - h - g, w, h },
-              { x: pill.x - w - g, y: pill.y - h - g, w, h },
-            ],
-          }
-        }),
-        true,
-      )
-      if (got) entry.note = { box: got.box, lines: got.value }
-    }
     for (const b of entry.bolts) {
       const text = i?.bolts[b.pos]
       if (!text) continue
